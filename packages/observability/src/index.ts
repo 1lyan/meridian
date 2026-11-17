@@ -1,0 +1,9 @@
+import { type Logger, pino } from 'pino'
+
+export function createLogger(service: string): Logger {
+  return pino({
+    name: service,
+    level: process.env.LOG_LEVEL ?? 'info',
+    base: { service },
+  })
+}

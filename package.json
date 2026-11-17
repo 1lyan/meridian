@@ -1,0 +1,28 @@
+{
+  "name": "meridian",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @meridian/api dev",
+    "compose:up": "docker compose up -d --wait",
+    "compose:down": "docker compose down",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:integration": "pnpm --filter @meridian/api test:integration",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "boundaries": "depcruise packages apps --config .dependency-cruiser.cjs",
+    "migrate": "pnpm --filter @meridian/api migrate",
+    "check": "pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test && pnpm test:integration"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "dependency-cruiser": "^16.10.0",
+    "turbo": "^2.5.0",
+    "typescript": "catalog:"
+  }
+}

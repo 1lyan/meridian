@@ -1,0 +1,23 @@
+{
+  "name": "@meridian/persistence-pg",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@meridian/domain-ordering": "workspace:*",
+    "@meridian/kernel": "workspace:*",
+    "drizzle-orm": "^0.44.2",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.15.4",
+    "typescript": "catalog:"
+  }
+}
