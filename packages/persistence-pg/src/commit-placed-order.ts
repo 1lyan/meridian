@@ -81,6 +81,7 @@ async function commitOnce(
       status: input.order.status,
       currency: input.order.currency,
       version: input.order.version,
+      paymentOutcome: input.order.paymentOutcome,
       createdAt: input.order.createdAt,
     })
 

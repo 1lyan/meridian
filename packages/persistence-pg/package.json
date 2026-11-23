@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@meridian/domain-billing": "workspace:*",
+    "@meridian/domain-inventory": "workspace:*",
     "@meridian/domain-ordering": "workspace:*",
     "@meridian/kernel": "workspace:*",
     "drizzle-orm": "^0.44.2",

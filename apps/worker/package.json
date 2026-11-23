@@ -7,10 +7,30 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@meridian/domain-ordering": "workspace:*",
+    "@meridian/kernel": "workspace:*",
+    "@meridian/messaging": "workspace:*",
+    "@meridian/observability": "workspace:*",
+    "@meridian/persistence-pg": "workspace:*",
+    "amqplib": "^0.10.8",
+    "pg": "^8.16.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@meridian/api": "workspace:*",
+    "@meridian/contracts": "workspace:*",
+    "@meridian/testkit": "workspace:*",
+    "@types/amqplib": "^0.10.7",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "@types/pg": "^8.15.4",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

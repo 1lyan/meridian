@@ -8,11 +8,12 @@
   },
   "scripts": {
     "dev": "pnpm --filter @meridian/api dev",
+    "dev:worker": "pnpm --filter @meridian/worker dev",
     "compose:up": "docker compose up -d --wait",
     "compose:down": "docker compose down",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "test:integration": "pnpm --filter @meridian/api test:integration",
+    "test:integration": "pnpm --filter @meridian/api --filter @meridian/worker test:integration",
     "lint": "biome check .",
     "format": "biome check --write .",
     "boundaries": "depcruise packages apps --config .dependency-cruiser.cjs",

@@ -16,6 +16,7 @@ export type PlacedOrder = {
   version: 1
   currency: Currency
   lines: readonly OrderLine[]
+  paymentOutcome: PaymentOutcome
   createdAt: Date
 }
 
@@ -29,12 +30,15 @@ export type OrderPlaced = {
   version: 1
 }
 
+export type PaymentOutcome = 'capture' | 'decline'
+
 export type PlaceOrderCommand = {
   tenantId: TenantId
   orderId: OrderId
   currency: Currency
   lines: readonly OrderLine[]
   now: Date
+  paymentOutcome?: PaymentOutcome
 }
 
 const maxSkuLength = 64
@@ -66,6 +70,7 @@ export function placeOrder(command: PlaceOrderCommand): {
     version: 1,
     currency: command.currency,
     lines,
+    paymentOutcome: command.paymentOutcome ?? 'capture',
     createdAt: command.now,
   }
 

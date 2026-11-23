@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { placeOrderBody } from '@meridian/contracts'
+import { placeOrderBody, receiveStockBody } from '@meridian/contracts'
 import {
   DomainError,
   InvalidTenantIdError,
@@ -8,6 +8,8 @@ import {
 import {
   createDatabase,
   IdempotencyConflictError,
+  loadOrder,
+  receiveStock,
 } from '@meridian/persistence-pg'
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { Pool } from 'pg'
@@ -111,6 +113,45 @@ export async function buildApp(
 
     if (result.replayed) reply.header('idempotent-replay', 'true')
     return reply.code(result.responseStatus).send(result.responseBody)
+  })
+
+  app.get('/v1/orders/:orderId', async (request, reply) => {
+    const tenant = readTenant(request.headers['x-tenant-id'])
+    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const params = request.params as { orderId: string }
+    const order = await loadOrder(options.pool, tenant.tenantId, params.orderId)
+    if (!order) {
+      return reply
+        .code(404)
+        .send({ error: { code: 'not_found', message: 'Order not found' } })
+    }
+    return {
+      orderId: order.id,
+      tenantId: order.tenantId,
+      status: order.status,
+      version: order.version,
+      rejectionReason: order.rejectionReason,
+    }
+  })
+
+  app.post('/v1/stock', async (request, reply) => {
+    const tenant = readTenant(request.headers['x-tenant-id'])
+    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const parsed = receiveStockBody.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: { code: 'invalid_body', message: 'Request body is invalid' },
+      })
+    }
+    await receiveStock(options.pool, {
+      tenantId: tenant.tenantId,
+      sku: parsed.data.sku,
+      onHand: parsed.data.onHand,
+      ...(parsed.data.warehouseId !== undefined
+        ? { warehouseId: parsed.data.warehouseId }
+        : {}),
+    })
+    return reply.code(204).send()
   })
 
   return app

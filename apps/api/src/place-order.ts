@@ -33,6 +33,7 @@ export async function placeOrder(
     orderId,
     currency: input.body.currency,
     lines: input.body.lines,
+    paymentOutcome: input.body.paymentOutcome,
     now: input.now,
   })
 

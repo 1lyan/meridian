@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@testcontainers/postgresql": "^11.7.0",
+    "@testcontainers/rabbitmq": "^11.7.0",
     "testcontainers": "^11.7.0"
   },
   "devDependencies": {

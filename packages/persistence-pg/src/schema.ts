@@ -10,7 +10,7 @@ import {
 } from 'drizzle-orm/pg-core'
 
 /**
- * Typed query surface for migration 0001. Column names must match that file.
+ * Typed query surface for migrations 0001 and 0002. Column names must match those files.
  * Checks and foreign keys are enforced by the SQL migration, which is what runs.
  */
 export const orders = pgTable(
@@ -21,6 +21,8 @@ export const orders = pgTable(
     status: text('status').notNull(),
     currency: text('currency').notNull(),
     version: integer('version').notNull(),
+    paymentOutcome: text('payment_outcome').notNull(),
+    rejectionReason: text('rejection_reason'),
     createdAt: timestamp('created_at', {
       withTimezone: true,
       mode: 'date',

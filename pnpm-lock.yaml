@@ -98,13 +98,59 @@ importers:
         version: 5.9.3
 
   apps/worker:
+    dependencies:
+      '@meridian/domain-ordering':
+        specifier: workspace:*
+        version: link:../../packages/domain-ordering
+      '@meridian/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+      '@meridian/messaging':
+        specifier: workspace:*
+        version: link:../../packages/messaging
+      '@meridian/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@meridian/persistence-pg':
+        specifier: workspace:*
+        version: link:../../packages/persistence-pg
+      amqplib:
+        specifier: ^0.10.8
+        version: 0.10.9
+      pg:
+        specifier: ^8.16.3
+        version: 8.23.1
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
+      '@meridian/api':
+        specifier: workspace:*
+        version: link:../api
+      '@meridian/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@meridian/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@types/amqplib':
+        specifier: ^0.10.7
+        version: 0.10.8
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
+      '@types/pg':
+        specifier: ^8.15.4
+        version: 8.23.1
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.15
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/node@22.20.5)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1)
 
   packages/auth:
     devDependencies:
@@ -140,9 +186,15 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
+      fast-check:
+        specifier: ^4.1.1
+        version: 4.10.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/node@22.20.5)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1)
 
   packages/domain-catalog:
     dependencies:
@@ -179,9 +231,15 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
+      fast-check:
+        specifier: ^4.1.1
+        version: 4.10.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/node@22.20.5)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1)
 
   packages/domain-ordering:
     dependencies:
@@ -219,6 +277,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/node@22.20.5)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1)
 
   packages/observability:
     dependencies:
@@ -247,6 +308,12 @@ importers:
 
   packages/persistence-pg:
     dependencies:
+      '@meridian/domain-billing':
+        specifier: workspace:*
+        version: link:../domain-billing
+      '@meridian/domain-inventory':
+        specifier: workspace:*
+        version: link:../domain-inventory
       '@meridian/domain-ordering':
         specifier: workspace:*
         version: link:../domain-ordering
@@ -273,6 +340,9 @@ importers:
   packages/testkit:
     dependencies:
       '@testcontainers/postgresql':
+        specifier: ^11.7.0
+        version: 11.14.0(bare-buffer@3.7.2)(supports-color@7.2.0)
+      '@testcontainers/rabbitmq':
         specifier: ^11.7.0
         version: 11.14.0(bare-buffer@3.7.2)(supports-color@7.2.0)
       testcontainers:
@@ -744,6 +814,9 @@ packages:
   '@testcontainers/postgresql@11.14.0':
     resolution: {integrity: sha512-wYbJn8GRTj8qfqzfVubxioYWlHJU/ImIjuzPwyy9C5Qfo6g3GLduPZAj+BifvqTZjgT3gd4gFVLCPhBji7dc1w==}
 
+  '@testcontainers/rabbitmq@11.14.0':
+    resolution: {integrity: sha512-SPrNN+fq7ojNnLKvuoC3lZd1OEG3ofDFBsg9fvsBiFyv1QylhP8S6MS025eozrD0u+aE2liXNFs6XuW367uCIw==}
+
   '@turbo/darwin-64@2.11.11':
     resolution: {integrity: sha512-HMMeUIEAsmyIbSYn1ySvF/4gGMa0joiTMq4dQDuloIAnOpbtFT3JEiVsYnASdTWDXvplbRbZlqjU1EBeSR9G1A==}
     cpu: [x64]
@@ -773,6 +846,9 @@ packages:
     resolution: {integrity: sha512-LURivfmgv34Osm8NR1gZGx4vdlux9KAgRM+FoooXNG0838ff0+akWZ76iPSke0NS2rsf7Z4Gw+YSaygzNTZuRA==}
     cpu: [arm64]
     os: [win32]
+
+  '@types/amqplib@0.10.8':
+    resolution: {integrity: sha512-vtDp8Pk1wsE/AuQ8/Rgtm6KUZYqcnTgNvEHwzCkX8rL7AGsC6zqAfKAAJhUZXFhM/Pp++tbnUHiam/8vVpPztA==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -874,6 +950,10 @@ packages:
 
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
+
+  amqplib@0.10.9:
+    resolution: {integrity: sha512-jwSftI4QjS3mizvnSnOrPGYiUnm1vI2OP1iXeOUz5pb74Ua0nbf6nPyyTzuiCLEE3fMpaJORXh2K/TQ08H5xGA==}
+    engines: {node: '>=10'}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -986,6 +1066,9 @@ packages:
   buffer-crc32@1.0.0:
     resolution: {integrity: sha512-Db1SbgBS/fg/392AblrMJk97KggmvYhr4pB5ZIMTWtaivCPMWLkmb7m21cJvpvgK+J3nsU2CmmixNBZx4vFj/w==}
     engines: {node: '>=8.0.0'}
+
+  buffer-more-ints@1.0.0:
+    resolution: {integrity: sha512-EMetuGFz5SLsT0QTnXzINh4Ksr+oo4i+UGTXEshiGCQWnsgSs7ZhJ8fzlwQ+OzEMs0MpDAMr1hxnblp5a4vcHg==}
 
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
@@ -1238,6 +1321,10 @@ packages:
   expect-type@1.4.0:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
     engines: {node: '>=12.0.0'}
+
+  fast-check@4.10.2:
+    resolution: {integrity: sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw==}
+    engines: {node: '>=12.17.0'}
 
   fast-decode-uri-component@1.0.1:
     resolution: {integrity: sha512-WKgKWg5eUxvRZGwW8FvfbaH7AXSh2cL+3j5fMGzUMCxWBJ3dV3a7Wz8y2f/uQ0e3B6WmodD3oS54jTQ9HVTIIg==}
@@ -1589,6 +1676,12 @@ packages:
   pump@3.0.4:
     resolution: {integrity: sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==}
 
+  pure-rand@8.4.2:
+    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
+
+  querystringify@2.2.0:
+    resolution: {integrity: sha512-FIqgj2EUvTa7R50u0rGsyTftzjYmv/a3hO345bZNrqabNqjtgiDMgmo4mkUjd+nzU5oF3dClKqFIPUKybUyqoQ==}
+
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
 
@@ -1625,6 +1718,9 @@ packages:
   require-from-string@2.0.2:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
+
+  requires-port@1.0.0:
+    resolution: {integrity: sha512-KigOCHcocU3XODJxsu8i/j8T9tzT4adHiecwORRQ0ZZFcp7ahwXuRU1m+yuO90C5ZUyGeGfocHDI14M3L3yDAQ==}
 
   resolve@1.22.14:
     resolution: {integrity: sha512-1ZjYvR9sbkiwC5+9QHetqW5HmA2pHRMaoupD01t2HlYnV/vydC2zPwLixhsMieSWVZt0JJRg5LVIk0Ow1D/TrA==}
@@ -1866,6 +1962,9 @@ packages:
   undici@7.30.2:
     resolution: {integrity: sha512-mLyPQnHwUxaM/rideoK/+KL8DaAJLRl4aBCfmX444aCSLnIaomqPLtNRe2jdCYcsk5wZzXrDIQC8ZeYNRAYyIA==}
     engines: {node: '>=20.18.1'}
+
+  url-parse@1.5.10:
+    resolution: {integrity: sha512-WypcfiRhfeUP9vvF0j6rw0J3hrWrw6iZv3+22h6iRMJ/8z1Tj6XfLP4DsUix5MhMPnXpiHDoKyoZ/bdCkwBCiQ==}
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
@@ -2302,6 +2401,15 @@ snapshots:
       - react-native-b4a
       - supports-color
 
+  '@testcontainers/rabbitmq@11.14.0(bare-buffer@3.7.2)(supports-color@7.2.0)':
+    dependencies:
+      testcontainers: 11.14.0(bare-buffer@3.7.2)(supports-color@7.2.0)
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+      - supports-color
+
   '@turbo/darwin-64@2.11.11':
     optional: true
 
@@ -2319,6 +2427,10 @@ snapshots:
 
   '@turbo/windows-arm64@2.11.11':
     optional: true
+
+  '@types/amqplib@0.10.8':
+    dependencies:
+      '@types/node': 22.20.5
 
   '@types/chai@5.2.3':
     dependencies:
@@ -2442,6 +2554,11 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
+  amqplib@0.10.9:
+    dependencies:
+      buffer-more-ints: 1.0.0
+      url-parse: 1.5.10
+
   ansi-regex@5.0.1: {}
 
   ansi-regex@6.6.0: {}
@@ -2549,6 +2666,8 @@ snapshots:
       balanced-match: 1.0.2
 
   buffer-crc32@1.0.0: {}
+
+  buffer-more-ints@1.0.0: {}
 
   buffer@5.7.1:
     dependencies:
@@ -2759,6 +2878,10 @@ snapshots:
   events@3.3.0: {}
 
   expect-type@1.4.0: {}
+
+  fast-check@4.10.2:
+    dependencies:
+      pure-rand: 8.4.2
 
   fast-decode-uri-component@1.0.1: {}
 
@@ -3096,6 +3219,10 @@ snapshots:
       end-of-stream: 1.4.5
       once: 1.4.0
 
+  pure-rand@8.4.2: {}
+
+  querystringify@2.2.0: {}
+
   quick-format-unescaped@4.0.4: {}
 
   readable-stream@2.3.8:
@@ -3137,6 +3264,8 @@ snapshots:
   require-directory@2.1.1: {}
 
   require-from-string@2.0.2: {}
+
+  requires-port@1.0.0: {}
 
   resolve@1.22.14:
     dependencies:
@@ -3435,6 +3564,11 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici@7.30.2: {}
+
+  url-parse@1.5.10:
+    dependencies:
+      querystringify: 2.2.0
+      requires-port: 1.0.0
 
   util-deprecate@1.0.2: {}
 
