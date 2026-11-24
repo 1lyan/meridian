@@ -1,33 +1,41 @@
 import { randomUUID } from 'node:crypto'
 import {
+  type AuthenticatedActor,
+  type IdentityProvider,
+  UnauthenticatedError,
+} from '@meridian/auth'
+import {
   catalogSearchQuery,
   placeOrderBody,
   receiveStockBody,
   upsertCatalogBody,
 } from '@meridian/contracts'
 import { catalogSearchText, embedText } from '@meridian/domain-catalog'
-import {
-  DomainError,
-  InvalidTenantIdError,
-  parseTenantId,
-} from '@meridian/kernel'
+import { DomainError } from '@meridian/kernel'
 import type { Projections } from '@meridian/persistence-mongo'
 import {
   createDatabase,
   IdempotencyConflictError,
+  listAudit,
   listCatalogProducts,
   listOrderTimelines,
   loadOrder,
   receiveStock,
   searchCatalog,
   upsertCatalogProduct,
+  withTenant,
 } from '@meridian/persistence-pg'
-import Fastify, { type FastifyInstance } from 'fastify'
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify'
 import type { Pool } from 'pg'
 import { placeOrder } from './place-order.js'
 
 export type BuildAppOptions = {
   pool: Pool
+  identity: IdentityProvider
   projections?: Projections
   logger?: boolean
   now?: () => Date
@@ -59,6 +67,11 @@ export async function buildApp(
         .code(409)
         .send({ error: { code: error.code, message: error.message } })
     }
+    if (error instanceof UnauthenticatedError) {
+      return reply
+        .code(401)
+        .send({ error: { code: error.code, message: error.message } })
+    }
     if (error instanceof DomainError) {
       return reply
         .code(422)
@@ -82,8 +95,8 @@ export async function buildApp(
   })
 
   app.post('/v1/orders', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
 
     const idempotencyKey = request.headers['idempotency-key']
     if (
@@ -115,11 +128,12 @@ export async function buildApp(
 
     const traceparent = request.headers.traceparent
     const result = await placeOrder(db, {
-      tenantId: tenant.tenantId,
+      tenantId: caller.tenantId,
       body: parsed.data,
       idempotencyKey,
       now: now(),
       requestId: request.id,
+      actorId: caller.subject,
       ...(typeof traceparent === 'string' ? { traceparent } : {}),
     })
 
@@ -128,10 +142,12 @@ export async function buildApp(
   })
 
   app.get('/v1/orders/:orderId', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
     const params = request.params as { orderId: string }
-    const order = await loadOrder(options.pool, tenant.tenantId, params.orderId)
+    const order = await withTenant(options.pool, caller.tenantId, (client) =>
+      loadOrder(client, caller.tenantId, params.orderId),
+    )
     if (!order) {
       return reply
         .code(404)
@@ -147,8 +163,8 @@ export async function buildApp(
   })
 
   app.post('/v1/stock', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
     const parsed = receiveStockBody.safeParse(request.body)
     if (!parsed.success) {
       return reply.code(400).send({
@@ -156,19 +172,20 @@ export async function buildApp(
       })
     }
     await receiveStock(options.pool, {
-      tenantId: tenant.tenantId,
+      tenantId: caller.tenantId,
       sku: parsed.data.sku,
       onHand: parsed.data.onHand,
       ...(parsed.data.warehouseId !== undefined
         ? { warehouseId: parsed.data.warehouseId }
         : {}),
+      actorId: caller.subject,
     })
     return reply.code(204).send()
   })
 
   app.post('/v1/catalog', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
     const parsed = upsertCatalogBody.safeParse(request.body)
     if (!parsed.success) {
       return reply.code(400).send({
@@ -176,7 +193,7 @@ export async function buildApp(
       })
     }
     const saved = await upsertCatalogProduct(options.pool, {
-      tenantId: tenant.tenantId,
+      tenantId: caller.tenantId,
       sku: parsed.data.sku,
       name: parsed.data.name,
       description: parsed.data.description,
@@ -184,6 +201,7 @@ export async function buildApp(
       embedding: embedText(
         catalogSearchText(parsed.data.name, parsed.data.description),
       ),
+      actorId: caller.subject,
     })
     return reply.code(200).send({
       productId: saved.id,
@@ -193,30 +211,32 @@ export async function buildApp(
   })
 
   app.get('/v1/catalog/search', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
     const parsed = catalogSearchQuery.safeParse(request.query)
     if (!parsed.success) {
       return reply.code(400).send({
         error: { code: 'invalid_query', message: 'Query is invalid' },
       })
     }
-    const results = await searchCatalog(options.pool, {
-      tenantId: tenant.tenantId,
-      query: parsed.data.q,
-      embedding: embedText(parsed.data.q),
-      limit: parsed.data.limit,
-    })
+    const results = await withTenant(options.pool, caller.tenantId, (client) =>
+      searchCatalog(client, {
+        tenantId: caller.tenantId,
+        query: parsed.data.q,
+        embedding: embedText(parsed.data.q),
+        limit: parsed.data.limit,
+      }),
+    )
     return { results }
   })
 
   app.get('/v1/catalog/:sku', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
     const projections = requireProjections(options.projections, reply)
     if (!projections) return reply
     const params = request.params as { sku: string }
-    const document = await projections.getCatalog(tenant.tenantId, params.sku)
+    const document = await projections.getCatalog(caller.tenantId, params.sku)
     if (!document) {
       return reply.code(404).send({
         error: { code: 'not_found', message: 'Catalog product not found' },
@@ -226,13 +246,13 @@ export async function buildApp(
   })
 
   app.get('/v1/orders/:orderId/timeline', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
     const projections = requireProjections(options.projections, reply)
     if (!projections) return reply
     const params = request.params as { orderId: string }
     const document = await projections.getTimeline(
-      tenant.tenantId,
+      caller.tenantId,
       params.orderId,
     )
     if (!document) {
@@ -244,14 +264,20 @@ export async function buildApp(
   })
 
   app.post('/v1/projections/rebuild', async (request, reply) => {
-    const tenant = readTenant(request.headers['x-tenant-id'])
-    if ('error' in tenant) return reply.code(400).send({ error: tenant.error })
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
     const projections = requireProjections(options.projections, reply)
     if (!projections) return reply
-    const products = await listCatalogProducts(options.pool, tenant.tenantId)
-    const timelines = await listOrderTimelines(options.pool, tenant.tenantId)
+    const { products, timelines } = await withTenant(
+      options.pool,
+      caller.tenantId,
+      async (client) => ({
+        products: await listCatalogProducts(client, caller.tenantId),
+        timelines: await listOrderTimelines(client, caller.tenantId),
+      }),
+    )
     const counts = await projections.replaceTenant(
-      tenant.tenantId,
+      caller.tenantId,
       products.map((product) => ({
         tenantId: product.tenantId,
         sku: product.sku,
@@ -260,7 +286,7 @@ export async function buildApp(
         unitPriceCents: product.unitPriceCents,
       })),
       timelines.map((timeline) => ({
-        tenantId: tenant.tenantId,
+        tenantId: caller.tenantId,
         orderId: timeline.orderId,
         status: timeline.status,
         version: timeline.version,
@@ -269,6 +295,15 @@ export async function buildApp(
       })),
     )
     return counts
+  })
+
+  app.get('/v1/audit', async (request, reply) => {
+    const caller = await authenticate(options.identity, request, reply)
+    if (!caller) return reply
+    const entries = await withTenant(options.pool, caller.tenantId, (client) =>
+      listAudit(client, 50),
+    )
+    return { entries }
   })
 
   return app
@@ -288,25 +323,20 @@ function requireProjections(
   return undefined
 }
 
-function readTenant(
-  header: string | string[] | undefined,
-):
-  | { tenantId: ReturnType<typeof parseTenantId> }
-  | { error: { code: string; message: string } } {
-  if (typeof header !== 'string') {
-    return {
+async function authenticate(
+  identity: IdentityProvider,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<AuthenticatedActor | undefined> {
+  const header = request.headers.authorization
+  if (typeof header !== 'string' || !header.startsWith('Bearer ')) {
+    await reply.code(401).send({
       error: {
-        code: 'tenant_required',
-        message: 'x-tenant-id header is required',
+        code: 'unauthenticated',
+        message: 'Authorization bearer token is required',
       },
-    }
+    })
+    return undefined
   }
-  try {
-    return { tenantId: parseTenantId(header) }
-  } catch (error) {
-    if (error instanceof InvalidTenantIdError) {
-      return { error: { code: error.code, message: error.message } }
-    }
-    throw error
-  }
+  return identity.verify(header.slice('Bearer '.length).trim())
 }

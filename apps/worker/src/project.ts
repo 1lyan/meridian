@@ -1,6 +1,10 @@
 import { parseTenantId } from '@meridian/kernel'
 import type { Projections } from '@meridian/persistence-mongo'
-import { loadCatalogProduct, loadOrder } from '@meridian/persistence-pg'
+import {
+  loadCatalogProduct,
+  loadOrder,
+  withTenant,
+} from '@meridian/persistence-pg'
 import type { Pool } from 'pg'
 import { z } from 'zod'
 import type { IncomingMessage } from './dispatch.js'
@@ -22,7 +26,9 @@ export async function projectMessage(
 ): Promise<void> {
   if (message.type === 'CatalogUpserted') {
     const fact = catalogFact.parse(message.payload)
-    const product = await loadCatalogProduct(pool, fact.tenantId, fact.sku)
+    const product = await withTenant(pool, fact.tenantId, (client) =>
+      loadCatalogProduct(client, fact.tenantId, fact.sku),
+    )
     if (!product) throw new Error(`Catalog product ${fact.sku} does not exist`)
     await projections.upsertCatalog({
       tenantId: product.tenantId,
@@ -37,7 +43,9 @@ export async function projectMessage(
   const parsed = orderFact.safeParse(message.payload)
   if (!parsed.success) return
   const tenantId = parseTenantId(parsed.data.tenantId)
-  const order = await loadOrder(pool, tenantId, parsed.data.orderId)
+  const order = await withTenant(pool, tenantId, (client) =>
+    loadOrder(client, tenantId, parsed.data.orderId),
+  )
   if (!order) return
   await projections.appendOrderEvent({
     tenantId: order.tenantId,

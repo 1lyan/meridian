@@ -17,6 +17,7 @@ import {
   reserveForOrder,
   transitionOrder,
   withInbox,
+  writeAudit,
 } from '@meridian/persistence-pg'
 import type { Pool, PoolClient } from 'pg'
 import { z } from 'zod'
@@ -91,6 +92,7 @@ async function handleOrderPlaced(
     pool,
     consumers.inventory,
     message.messageId,
+    fact.tenantId,
     async (client) => {
       const outcome = await reserveForOrder(
         client,
@@ -137,6 +139,7 @@ async function handleProcess(
     pool,
     consumers.processManager,
     message.messageId,
+    fact.tenantId,
     async (client) => {
       await applyDecision(client, fact.tenantId, fact.orderId, decide, headers)
     },
@@ -160,6 +163,7 @@ async function handleCollectPayment(
     pool,
     consumers.billing,
     message.messageId,
+    command.tenantId,
     async (client) => {
       if (result === 'captured') {
         await recordCapture(
@@ -194,6 +198,7 @@ async function handleRelease(
     pool,
     consumers.inventory,
     message.messageId,
+    fact.tenantId,
     async (client) => {
       await releaseForOrder(client, fact.tenantId, fact.orderId)
     },
@@ -245,7 +250,25 @@ async function applyDecision(
     )
     if (!retried) return
     await appendCommands(client, again.commands, headers)
+    await auditTransition(client, tenantId, orderId, again.status)
     return
   }
   await appendCommands(client, decision.commands, headers)
+  await auditTransition(client, tenantId, orderId, decision.status)
+}
+
+async function auditTransition(
+  client: PoolClient,
+  tenantId: string,
+  orderId: string,
+  status: string,
+): Promise<void> {
+  await writeAudit(client, {
+    tenantId,
+    actorId: 'worker',
+    action: 'order.transition',
+    aggregateType: 'order',
+    aggregateId: orderId,
+    detail: status,
+  })
 }

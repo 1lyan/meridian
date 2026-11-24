@@ -15,7 +15,7 @@ packages/persistence-mongo
                   Rebuildable catalog and order-timeline documents.
 packages/messaging
                   Exchange, routing key, and queue names. Phase 1 opens the broker.
-packages/auth     IdentityProvider port. Phase 3.
+packages/auth     IdentityProvider. Keycloak JWKS locally, the same checks for Cognito later.
 packages/observability
                   Logger used by workers. The API uses Fastify's logger.
 packages/testkit  Postgres, RabbitMQ, and Mongo testcontainers.

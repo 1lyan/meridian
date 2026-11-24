@@ -14,6 +14,6 @@ Two requests with the same key can both observe an empty slot under read committ
 
 A second attempt that reuses an order id fails the order primary key after the new idempotency insert. That transaction rolls back, including the new key. The retry fails the same way and the error surfaces. The test `rolls the new idempotency key back` locks this in.
 
-The tenant arrives as `x-tenant-id` until phase 3 replaces that header with a JWT. The value is parsed into a branded `TenantId` before the domain sees it. `traceparent`, when the caller sends it, is stored on the outbox headers so the relay can put it on the AMQP message without reconstructing it.
+The tenant arrives as the `tenant_id` claim on a bearer token. The verifier parses it into a branded `TenantId` before the domain sees it. The same transaction sets the Postgres role and `app.tenant_id` so row-level security applies. `traceparent`, when the caller sends it, is stored on the outbox headers so the relay can put it on the AMQP message without reconstructing it.
 
 Money is integer cents. Quantities are positive integers. Sku is trimmed, 1 to 64 characters, and unique inside the order. The database repeats those checks. The domain repeats them too, so a future caller that skips HTTP validation still cannot persist a broken order.

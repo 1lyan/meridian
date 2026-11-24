@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { buildApp } from '@meridian/api/app'
+import { createTestIdentity } from '@meridian/auth'
 import { queues } from '@meridian/messaging'
 import {
   countUnpublished,
@@ -25,13 +26,22 @@ describe('order saga', () => {
   let pool: Pool
   let app: Awaited<ReturnType<typeof buildApp>>
   let worker: Worker
+  let bearer!: (
+    tenantId: string,
+    extra?: Record<string, string>,
+  ) => Promise<Record<string, string>>
 
   beforeAll(async () => {
     postgres = await startPostgres()
     rabbit = await startRabbit()
     pool = new Pool({ connectionString: postgres.getConnectionUri() })
     await migrate(pool)
-    app = await buildApp({ pool })
+    const identity = await createTestIdentity()
+    bearer = async (tenantId, extra = {}) => ({
+      authorization: `Bearer ${await identity.sign({ tenantId, subject: 'tester' })}`,
+      ...extra,
+    })
+    app = await buildApp({ pool, identity: identity.identity })
     worker = await startWorker({
       pool,
       rabbitUrl: rabbit.getAmqpUrl(),
@@ -188,7 +198,7 @@ describe('order saga', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/v1/stock',
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
       payload: { sku: line.sku, onHand },
     })
     expect(response.statusCode).toBe(204)
@@ -199,7 +209,7 @@ describe('order saga', () => {
       method: 'POST',
       url: '/v1/orders',
       headers: {
-        'x-tenant-id': tenantId,
+        ...(await bearer(tenantId)),
         'idempotency-key': randomUUID(),
       },
       payload: { currency: 'USD', paymentOutcome, lines: [line] },
@@ -212,7 +222,7 @@ describe('order saga', () => {
     const response = await app.inject({
       method: 'GET',
       url: `/v1/orders/${orderId}`,
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
     })
     expect(response.statusCode).toBe(200)
     return response.json<{

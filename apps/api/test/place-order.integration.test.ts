@@ -1,3 +1,4 @@
+import { createTestIdentity } from '@meridian/auth'
 import { placeOrder as placeOrderDomain } from '@meridian/domain-ordering'
 import { parseOrderId, parseTenantId } from '@meridian/kernel'
 import {
@@ -20,14 +21,24 @@ describe('POST /v1/orders', () => {
   let container!: Awaited<ReturnType<typeof startPostgres>>
   let pool!: Pool
   let app!: FastifyInstance
+  let bearer!: (
+    tenantId: string,
+    extra?: Record<string, string>,
+  ) => Promise<Record<string, string>>
 
   beforeAll(async () => {
     container = await startPostgres()
     pool = new Pool({ connectionString: container.getConnectionUri() })
     await migrate(pool)
     await migrate(pool)
+    const identity = await createTestIdentity()
+    bearer = async (tenantId, extra: Record<string, string> = {}) => ({
+      authorization: `Bearer ${await identity.sign({ tenantId, subject: 'tester' })}`,
+      ...extra,
+    })
     app = await buildApp({
       pool,
+      identity: identity.identity,
       now: () => new Date('2026-11-17T12:00:00.000Z'),
     })
   }, 300_000)
@@ -43,11 +54,10 @@ describe('POST /v1/orders', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: {
-        'x-tenant-id': tenantId,
+      headers: await bearer(tenantId, {
         'idempotency-key': 'place-1',
         traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
-      },
+      }),
       payload: body,
     })
 
@@ -89,7 +99,7 @@ describe('POST /v1/orders', () => {
 
   it('replays the stored response and does not insert a second order', async () => {
     const tenantId = crypto.randomUUID()
-    const headers = { 'x-tenant-id': tenantId, 'idempotency-key': 'replay-1' }
+    const headers = await bearer(tenantId, { 'idempotency-key': 'replay-1' })
     const first = await app.inject({
       method: 'POST',
       url: '/v1/orders',
@@ -116,7 +126,7 @@ describe('POST /v1/orders', () => {
 
   it('returns 409 when the same key is reused with a different body', async () => {
     const tenantId = crypto.randomUUID()
-    const headers = { 'x-tenant-id': tenantId, 'idempotency-key': 'conflict-1' }
+    const headers = await bearer(tenantId, { 'idempotency-key': 'conflict-1' })
     const first = await app.inject({
       method: 'POST',
       url: '/v1/orders',
@@ -151,13 +161,13 @@ describe('POST /v1/orders', () => {
     const first = await app.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'x-tenant-id': crypto.randomUUID(), 'idempotency-key': key },
+      headers: await bearer(crypto.randomUUID(), { 'idempotency-key': key }),
       payload: body,
     })
     const second = await app.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'x-tenant-id': crypto.randomUUID(), 'idempotency-key': key },
+      headers: await bearer(crypto.randomUUID(), { 'idempotency-key': key }),
       payload: body,
     })
     expect(first.statusCode).toBe(201)
@@ -171,7 +181,7 @@ describe('POST /v1/orders', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'x-tenant-id': tenantRaw, 'idempotency-key': 'original' },
+      headers: await bearer(tenantRaw, { 'idempotency-key': 'original' }),
       payload: body,
     })
     expect(created.statusCode).toBe(201)
@@ -198,6 +208,7 @@ describe('POST /v1/orders', () => {
           version: 1,
         },
         headers: { tenantId: tenantRaw, requestId: 'rollback-test' },
+        actorId: 'tester',
       }),
     ).rejects.toThrow()
 
@@ -213,29 +224,29 @@ describe('POST /v1/orders', () => {
     expect(messages.rows[0]?.n).toBe(1)
   })
 
-  it('rejects a missing idempotency key, a bad tenant, and an empty order without writing', async () => {
+  it('rejects a missing token, a bad token, and an empty order without writing', async () => {
     const tenantId = crypto.randomUUID()
-    const missingKey = await app.inject({
+    const missingToken = await app.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'x-tenant-id': tenantId },
+      headers: { 'idempotency-key': 'k' },
       payload: body,
     })
-    const badTenant = await app.inject({
+    const badToken = await app.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'x-tenant-id': 'north', 'idempotency-key': 'k' },
+      headers: { authorization: 'Bearer not-a-token', 'idempotency-key': 'k' },
       payload: body,
     })
     const empty = await app.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'x-tenant-id': tenantId, 'idempotency-key': 'empty' },
+      headers: await bearer(tenantId, { 'idempotency-key': 'empty' }),
       payload: { currency: 'USD', lines: [] },
     })
 
-    expect(missingKey.statusCode).toBe(400)
-    expect(badTenant.statusCode).toBe(400)
+    expect(missingToken.statusCode).toBe(401)
+    expect(badToken.statusCode).toBe(401)
     expect(empty.statusCode).toBe(400)
 
     const count = await pool.query<{ n: number }>(
@@ -253,7 +264,7 @@ describe('POST /v1/orders', () => {
 
   it('lets one of two concurrent identical requests win and stores a single order', async () => {
     const tenantId = crypto.randomUUID()
-    const headers = { 'x-tenant-id': tenantId, 'idempotency-key': 'race-1' }
+    const headers = await bearer(tenantId, { 'idempotency-key': 'race-1' })
     const [left, right] = await Promise.all([
       app.inject({ method: 'POST', url: '/v1/orders', headers, payload: body }),
       app.inject({ method: 'POST', url: '/v1/orders', headers, payload: body }),

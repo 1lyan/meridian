@@ -33,3 +33,11 @@ export {
   transitionOrder,
   withInbox,
 } from './saga-store.js'
+export type { AuditEntry } from './tenant-session.js'
+export {
+  applyTenant,
+  appRole,
+  listAudit,
+  withTenant,
+  writeAudit,
+} from './tenant-session.js'

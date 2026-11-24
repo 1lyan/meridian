@@ -14,6 +14,7 @@ export type PlaceOrderInput = {
   idempotencyKey: string
   now: Date
   requestId: string
+  actorId: string
   traceparent?: string
 }
 
@@ -60,6 +61,7 @@ export async function placeOrder(
     responseStatus: 201,
     responseBody,
     headers,
+    actorId: input.actorId,
   })
 
   if (committed.outcome === 'created') {

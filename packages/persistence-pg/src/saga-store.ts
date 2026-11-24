@@ -11,6 +11,7 @@ import type {
 } from '@meridian/domain-ordering'
 import { parseOrderId, parseTenantId, type TenantId } from '@meridian/kernel'
 import type { Pool, PoolClient } from 'pg'
+import { applyTenant, writeAudit } from './tenant-session.js'
 
 export type OutboxRow = {
   id: string
@@ -28,17 +29,19 @@ export async function withInbox<T>(
   pool: Pool,
   consumer: string,
   messageId: string,
+  tenantId: string,
   work: (client: PoolClient) => Promise<T>,
 ): Promise<{ status: 'duplicate' } | { status: 'done'; value: T }> {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    await applyTenant(client, tenantId)
     const inserted = await client.query(
-      `INSERT INTO inbox (consumer, message_id)
-       VALUES ($1, $2)
+      `INSERT INTO inbox (consumer, message_id, tenant_id)
+       VALUES ($1, $2, $3)
        ON CONFLICT DO NOTHING
        RETURNING message_id`,
-      [consumer, messageId],
+      [consumer, messageId, parseTenantId(tenantId)],
     )
     if (inserted.rowCount === 0) {
       await client.query('COMMIT')
@@ -219,17 +222,38 @@ export async function receiveStock(
     sku: string
     onHand: number
     warehouseId?: string
+    actorId: string
   },
 ): Promise<void> {
   const warehouseId = input.warehouseId ?? defaultWarehouseId
-  await pool.query(
-    `INSERT INTO stock_items (tenant_id, sku, warehouse_id, on_hand, reserved, version)
-     VALUES ($1, $2, $3, $4, 0, 0)
-     ON CONFLICT (tenant_id, sku, warehouse_id)
-     DO UPDATE SET on_hand = stock_items.on_hand + EXCLUDED.on_hand,
-                   version = stock_items.version + 1`,
-    [input.tenantId, input.sku, warehouseId, input.onHand],
-  )
+  const tenantId = parseTenantId(input.tenantId)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await applyTenant(client, tenantId)
+    await client.query(
+      `INSERT INTO stock_items (tenant_id, sku, warehouse_id, on_hand, reserved, version)
+       VALUES ($1, $2, $3, $4, 0, 0)
+       ON CONFLICT (tenant_id, sku, warehouse_id)
+       DO UPDATE SET on_hand = stock_items.on_hand + EXCLUDED.on_hand,
+                     version = stock_items.version + 1`,
+      [tenantId, input.sku, warehouseId, input.onHand],
+    )
+    await writeAudit(client, {
+      tenantId,
+      actorId: input.actorId,
+      action: 'stock.receive',
+      aggregateType: 'stock',
+      aggregateId: warehouseId,
+      detail: `${input.sku} +${input.onHand}`,
+    })
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 type LockedStock = {
@@ -336,15 +360,36 @@ export async function rejectExpiredPlacedOrders(
   timeoutMs: number,
 ): Promise<number> {
   const deadline = new Date(now.getTime() - timeoutMs)
-  const result = await pool.query(
-    `UPDATE orders
-     SET status = 'rejected',
-         rejection_reason = 'reservation_timeout',
-         version = version + 1
-     WHERE status = 'placed' AND created_at < $1`,
-    [deadline],
-  )
-  return result.rowCount ?? 0
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await client.query<{ id: string; tenant_id: string }>(
+      `UPDATE orders
+       SET status = 'rejected',
+           rejection_reason = 'reservation_timeout',
+           version = version + 1
+       WHERE status = 'placed' AND created_at < $1
+       RETURNING id, tenant_id`,
+      [deadline],
+    )
+    for (const row of result.rows) {
+      await writeAudit(client, {
+        tenantId: row.tenant_id,
+        actorId: 'worker',
+        action: 'order.transition',
+        aggregateType: 'order',
+        aggregateId: row.id,
+        detail: 'rejected:reservation_timeout',
+      })
+    }
+    await client.query('COMMIT')
+    return result.rowCount ?? 0
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 export async function countUnpublished(

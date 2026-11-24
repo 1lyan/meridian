@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { embeddingDimensions } from '@meridian/domain-catalog'
 import { parseTenantId, type TenantId } from '@meridian/kernel'
-import type { Pool } from 'pg'
+import type { Pool, PoolClient } from 'pg'
 import { appendOutbox } from './saga-store.js'
+import { applyTenant, writeAudit } from './tenant-session.js'
+
+type Queryable = Pool | PoolClient
 
 export type CatalogProductRecord = {
   id: string
@@ -39,6 +42,7 @@ export async function upsertCatalogProduct(
     description: string
     unitPriceCents: number
     embedding: readonly number[]
+    actorId: string
   },
 ): Promise<CatalogProductRecord> {
   if (input.embedding.length !== embeddingDimensions) {
@@ -50,6 +54,7 @@ export async function upsertCatalogProduct(
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    await applyTenant(client, tenantId)
     const saved = await client.query<{ id: string }>(
       `INSERT INTO catalog_products
          (id, tenant_id, sku, name, description, unit_price_cents, embedding)
@@ -85,6 +90,14 @@ export async function upsertCatalogProduct(
       },
       headers: {},
     })
+    await writeAudit(client, {
+      tenantId,
+      actorId: input.actorId,
+      action: 'catalog.upsert',
+      aggregateType: 'catalog',
+      aggregateId: id,
+      detail: input.sku,
+    })
     await client.query('COMMIT')
     return {
       id,
@@ -103,11 +116,11 @@ export async function upsertCatalogProduct(
 }
 
 export async function loadCatalogProduct(
-  pool: Pool,
+  db: Queryable,
   tenantId: string,
   sku: string,
 ): Promise<CatalogProductRecord | null> {
-  const result = await pool.query<{
+  const result = await db.query<{
     id: string
     tenant_id: string
     sku: string
@@ -126,10 +139,10 @@ export async function loadCatalogProduct(
 }
 
 export async function listCatalogProducts(
-  pool: Pool,
+  db: Queryable,
   tenantId: TenantId,
 ): Promise<CatalogProductRecord[]> {
-  const result = await pool.query<{
+  const result = await db.query<{
     id: string
     tenant_id: string
     sku: string
@@ -147,7 +160,7 @@ export async function listCatalogProducts(
 }
 
 export async function searchCatalog(
-  pool: Pool,
+  db: Queryable,
   input: {
     tenantId: string
     query: string
@@ -160,7 +173,7 @@ export async function searchCatalog(
       `Embedding must have ${embeddingDimensions} dimensions, received ${input.embedding.length}`,
     )
   }
-  const result = await pool.query<{
+  const result = await db.query<{
     sku: string
     name: string
     description: string
@@ -205,10 +218,10 @@ export async function searchCatalog(
 }
 
 export async function listOrderTimelines(
-  pool: Pool,
+  db: Queryable,
   tenantId: TenantId,
 ): Promise<StoredTimeline[]> {
-  const orders = await pool.query<{
+  const orders = await db.query<{
     id: string
     status: string
     version: number
@@ -220,7 +233,7 @@ export async function listOrderTimelines(
      ORDER BY created_at, id`,
     [tenantId],
   )
-  const events = await pool.query<{
+  const events = await db.query<{
     id: string
     aggregate_id: string
     type: string

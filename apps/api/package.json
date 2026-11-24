@@ -16,6 +16,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@meridian/auth": "workspace:*",
     "@meridian/contracts": "workspace:*",
     "@meridian/domain-catalog": "workspace:*",
     "@meridian/domain-ordering": "workspace:*",

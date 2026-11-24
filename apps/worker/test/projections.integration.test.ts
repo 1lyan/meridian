@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { buildApp } from '@meridian/api/app'
+import { createTestIdentity } from '@meridian/auth'
 import { createProjections } from '@meridian/persistence-mongo'
 import { migrate } from '@meridian/persistence-pg'
 import { startMongo, startPostgres, startRabbit } from '@meridian/testkit'
@@ -33,6 +34,10 @@ describe('read side', () => {
   const tenantId = randomUUID()
   const otherTenantId = randomUUID()
   let orderId = ''
+  let bearer!: (
+    tenantId: string,
+    extra?: Record<string, string>,
+  ) => Promise<Record<string, string>>
 
   beforeAll(async () => {
     postgres = await startPostgres()
@@ -46,7 +51,12 @@ describe('read side', () => {
     await mongoClient.connect()
     const projections = createProjections(mongoClient.db('meridian'))
     await projections.ensureIndexes()
-    app = await buildApp({ pool, projections })
+    const identity = await createTestIdentity()
+    bearer = async (tenantId, extra = {}) => ({
+      authorization: `Bearer ${await identity.sign({ tenantId, subject: 'tester' })}`,
+      ...extra,
+    })
+    app = await buildApp({ pool, projections, identity: identity.identity })
     worker = await startWorker({
       pool,
       rabbitUrl: rabbit.getAmqpUrl(),
@@ -70,7 +80,7 @@ describe('read side', () => {
     const response = await app.inject({
       method: 'GET',
       url: '/v1/catalog/search',
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
     })
     expect(response.statusCode).toBe(400)
   })
@@ -83,7 +93,7 @@ describe('read side', () => {
     const found = await app.inject({
       method: 'GET',
       url: '/v1/catalog/search?q=nitrile%20gloves',
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
     })
     expect(found.statusCode).toBe(200)
     const results = found.json<{ results: { sku: string }[] }>().results
@@ -93,7 +103,7 @@ describe('read side', () => {
     const hidden = await app.inject({
       method: 'GET',
       url: '/v1/catalog/search?q=nitrile%20gloves',
-      headers: { 'x-tenant-id': otherTenantId },
+      headers: await bearer(otherTenantId),
     })
     expect(hidden.json<{ results: unknown[] }>().results).toEqual([])
 
@@ -101,7 +111,7 @@ describe('read side', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/v1/catalog/${gloves.sku}`,
-        headers: { 'x-tenant-id': tenantId },
+        headers: await bearer(tenantId),
       })
       if (response.statusCode !== 200) return null
       return response.json<{ name: string; tenantId: string }>()
@@ -115,7 +125,7 @@ describe('read side', () => {
     const stock = await app.inject({
       method: 'POST',
       url: '/v1/stock',
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
       payload: { sku: gloves.sku, onHand: 10 },
     })
     expect(stock.statusCode).toBe(204)
@@ -123,7 +133,7 @@ describe('read side', () => {
       method: 'POST',
       url: '/v1/orders',
       headers: {
-        'x-tenant-id': tenantId,
+        ...(await bearer(tenantId)),
         'idempotency-key': randomUUID(),
       },
       payload: {
@@ -138,7 +148,7 @@ describe('read side', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/v1/orders/${orderId}/timeline`,
-        headers: { 'x-tenant-id': tenantId },
+        headers: await bearer(tenantId),
       })
       if (response.statusCode !== 200) return null
       const body = response.json<{
@@ -160,7 +170,7 @@ describe('read side', () => {
     const rebuilt = await app.inject({
       method: 'POST',
       url: '/v1/projections/rebuild',
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
     })
     expect(rebuilt.statusCode).toBe(200)
     expect(rebuilt.json<{ catalog: number; timelines: number }>()).toEqual({
@@ -171,7 +181,7 @@ describe('read side', () => {
     const catalog = await app.inject({
       method: 'GET',
       url: `/v1/catalog/${gloves.sku}`,
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
     })
     expect(catalog.statusCode).toBe(200)
     expect(catalog.json<{ description: string }>().description).toBe(
@@ -180,7 +190,7 @@ describe('read side', () => {
     const restored = await app.inject({
       method: 'GET',
       url: `/v1/orders/${orderId}/timeline`,
-      headers: { 'x-tenant-id': tenantId },
+      headers: await bearer(tenantId),
     })
     expect(restored.statusCode).toBe(200)
     const body = restored.json<{ status: string; events: { type: string }[] }>()
@@ -198,7 +208,7 @@ describe('read side', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/v1/catalog',
-      headers: { 'x-tenant-id': tenant },
+      headers: await bearer(tenant),
       payload: product,
     })
     return response
@@ -208,7 +218,7 @@ describe('read side', () => {
     const response = await app.inject({
       method: 'GET',
       url: `/v1/catalog/${sku}`,
-      headers: { 'x-tenant-id': tenant },
+      headers: await bearer(tenant),
     })
     return response.statusCode
   }

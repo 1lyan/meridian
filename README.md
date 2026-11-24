@@ -4,7 +4,7 @@ Multi-tenant clinical supply control plane. Placing an order commits the order a
 
 There is no patient data in this system.
 
-Money is integer cents. `499` is $4.99. The tenant is the `x-tenant-id` header, and it must be a UUID. Phase 3 replaces that header with a JWT.
+Money is integer cents. `499` is $4.99. The tenant is the `tenant_id` claim in a bearer token. Keycloak issues that token locally.
 
 ## Prerequisites
 
@@ -33,6 +33,8 @@ cp .env.example .env
 DATABASE_URL=postgres://meridian:meridian@localhost:5432/meridian
 RABBIT_URL=amqp://guest:guest@localhost:5672
 MONGO_URL=mongodb://localhost:27017/meridian
+KEYCLOAK_ISSUER=http://localhost:8080/realms/meridian
+KEYCLOAK_AUDIENCE=meridian-api
 PORT=3000
 LOG_LEVEL=info
 RESERVATION_TIMEOUT_MS=15000
@@ -40,7 +42,7 @@ RESERVATION_TIMEOUT_MS=15000
 
 `RESERVATION_TIMEOUT_MS` is how long a `placed` order may wait for a reservation before the worker rejects it. The default is 15 seconds.
 
-The API and the worker read those variables from the process environment. Both require `MONGO_URL`. Copying `.env` does not load it. Run this in every terminal that starts the API, the worker, or migrations:
+The API and the worker read those variables from the process environment. The API also requires `KEYCLOAK_ISSUER` and `KEYCLOAK_AUDIENCE`. Both processes require `MONGO_URL`. Copying `.env` does not load it. Run this in every terminal that starts the API, the worker, or migrations:
 
 ```bash
 set -a
@@ -146,7 +148,7 @@ psql "postgres://meridian:meridian@localhost:5432/meridian" -c 'SELECT current_u
 
 ### RabbitMQ and the other Compose services
 
-The worker needs RabbitMQ. The API and the worker need MongoDB for catalog documents and order timelines. Redis, Mailpit, and Keycloak stay unused until a later phase.
+The worker needs RabbitMQ. The API and the worker need MongoDB for catalog documents and order timelines. The API checks bearer tokens against Keycloak. Redis and Mailpit stay unused until a later phase.
 
 When Homebrew Postgres already owns port 5432, start every Compose service except Postgres:
 
@@ -162,14 +164,14 @@ pnpm compose:up
 
 `pnpm compose:up` runs `docker compose up -d --wait`. The services are:
 
-| Service                   | Address                                                  | Credentials                                  | Used now                              |
-| ------------------------- | -------------------------------------------------------- | -------------------------------------------- | ------------------------------------- |
-| Postgres 16 with pgvector | `localhost:5432`                                         | `meridian` / `meridian`, database `meridian` | yes, when this process owns port 5432 |
-| RabbitMQ 4                | `localhost:5672`, management UI `http://localhost:15672` | `guest` / `guest`                            | yes                                   |
-| MongoDB 7                 | `localhost:27017`, database `meridian`                   | none                                         | yes                                   |
-| Redis 7                   | `localhost:6379`                                         | none                                         | later                                 |
-| Mailpit                   | `http://localhost:8025`                                  | none                                         | later                                 |
-| Keycloak 26               | `http://localhost:8080`                                  | `admin` / `admin`                            | phase 3                               |
+| Service                   | Address                                                  | Credentials                                                     | Used now                              |
+| ------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------- |
+| Postgres 16 with pgvector | `localhost:5432`                                         | `meridian` / `meridian`, database `meridian`                    | yes, when this process owns port 5432 |
+| RabbitMQ 4                | `localhost:5672`, management UI `http://localhost:15672` | `guest` / `guest`                                               | yes                                   |
+| MongoDB 7                 | `localhost:27017`, database `meridian`                   | none                                                            | yes                                   |
+| Redis 7                   | `localhost:6379`                                         | none                                                            | later                                 |
+| Mailpit                   | `http://localhost:8025`                                  | none                                                            | later                                 |
+| Keycloak 26               | `http://localhost:8080`                                  | admin `admin` / `admin`; users `alice` / `alice`, `bob` / `bob` | yes                                   |
 
 These containers have no named volumes. `pnpm compose:down` removes them and the data inside them. A Compose Postgres then needs `pnpm compose:up` again. A Homebrew database stays where it is. The API and the worker both apply migrations on startup once the role, the database, and the extension files exist.
 
@@ -200,7 +202,31 @@ set -a && source .env && set +a
 pnpm dev:worker
 ```
 
-`GET /health` returns `{"status":"ok","postgres":"ok"}` when the API can reach Postgres.
+`GET /health` returns `{"status":"ok","postgres":"ok"}` when the API can reach Postgres. It does not require a token. Every other route does.
+
+Keycloak imports the `meridian` realm on startup. Alice's token carries tenant `6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b`. Bob's token carries `11111111-1111-4111-8111-111111111111`. Ask Keycloak for a token after the API is up:
+
+```bash
+export TENANT=6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b
+export TOKEN
+TOKEN=$(curl -s -X POST http://localhost:8080/realms/meridian/protocol/openid-connect/token \
+  -H 'content-type: application/x-www-form-urlencoded' \
+  -d 'client_id=meridian-api' \
+  -d 'grant_type=password' \
+  -d 'username=alice' \
+  -d 'password=alice' \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).access_token))')
+export BOB_TOKEN
+BOB_TOKEN=$(curl -s -X POST http://localhost:8080/realms/meridian/protocol/openid-connect/token \
+  -H 'content-type: application/x-www-form-urlencoded' \
+  -d 'client_id=meridian-api' \
+  -d 'grant_type=password' \
+  -d 'username=bob' \
+  -d 'password=bob' \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).access_token))')
+```
+
+Send `authorization: Bearer $TOKEN` on later calls. A missing or rejected token is `401` with `"code":"unauthenticated"`.
 
 The worker must be running for an order to move past `placed`. It polls the outbox about every 200ms, publishes with publisher confirms, and consumes the order queue. A healthy local order reaches `allocated` or `rejected` in well under a second.
 
@@ -240,11 +266,7 @@ That is Biome, TypeScript, the dependency-cruiser rule, unit tests, and integrat
 
 Load the environment and start Compose, the API, and the worker before the saga scenarios. The validation calls need only the API.
 
-Use one tenant for the whole session:
-
-```bash
-export TENANT=6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b
-```
+Use Alice for the whole session. `$TENANT` and `$TOKEN` come from the sign-in step above. Bob is the other clinic.
 
 `POST /v1/orders` always answers with the body stored at insert time: `status` is `placed` and `version` is `1`, including on an idempotent replay. Follow the saga with `GET /v1/orders/:orderId`. Stock receives add to on-hand and answer `204` with an empty body.
 
@@ -255,7 +277,7 @@ Receive 10 units of `GLV-100`. The default warehouse is `00000000-0000-4000-8000
 ```bash
 curl -sS -D - -o /dev/null -X POST localhost:3000/v1/stock \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -d '{"sku":"GLV-100","onHand":10}'
 ```
 
@@ -266,7 +288,7 @@ Place an order for 2 units at 499 cents. Omit `paymentOutcome` and the API store
 ```bash
 curl -sS -D - -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-happy-1' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":2,"unitPriceCents":499}]}'
 ```
@@ -287,7 +309,7 @@ Save the id and poll until the worker finishes:
 ```bash
 export ORDER_ID=<orderId from the response>
 for i in 1 2 3 4 5 6 7 8 9 10; do
-  curl -sS "localhost:3000/v1/orders/$ORDER_ID" -H "x-tenant-id: $TENANT"
+  curl -sS "localhost:3000/v1/orders/$ORDER_ID" -H "authorization: Bearer $TOKEN"
   echo
   sleep 0.3
 done
@@ -300,7 +322,7 @@ Send the same request again, including the same idempotency key and the same bod
 ```bash
 curl -sS -D - -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-happy-1' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":2,"unitPriceCents":499}]}'
 ```
@@ -335,35 +357,35 @@ docker compose exec postgres psql -U meridian -d meridian -c \
 
 These return before any order is written.
 
-Missing tenant:
+Missing token:
 
 ```bash
 curl -sS -D - -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H 'idempotency-key: manual-no-tenant' \
+  -H 'idempotency-key: manual-no-token' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":1,"unitPriceCents":499}]}'
 ```
 
-Expect `400` and `"code":"tenant_required"`.
+Expect `401` and `"code":"unauthenticated"`.
 
-A tenant that is not a UUID:
+A bearer token that is not a JWT:
 
 ```bash
 curl -sS -D - -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H 'x-tenant-id: clinic-north' \
-  -H 'idempotency-key: manual-bad-tenant' \
+  -H 'authorization: Bearer clinic-north' \
+  -H 'idempotency-key: manual-bad-token' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":1,"unitPriceCents":499}]}'
 ```
 
-Expect `400` and `"code":"invalid_tenant_id"`.
+Expect `401` and `"code":"unauthenticated"`.
 
 Missing idempotency key:
 
 ```bash
 curl -sS -D - -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":1,"unitPriceCents":499}]}'
 ```
 
@@ -374,7 +396,7 @@ A body the contract refuses. Currency is only `USD`, each sku appears once, quan
 ```bash
 curl -sS -D - -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-bad-body' \
   -d '{"currency":"EUR","lines":[{"sku":"GLV-100","quantity":1,"unitPriceCents":499},{"sku":"GLV-100","quantity":1,"unitPriceCents":499}]}'
 ```
@@ -386,7 +408,7 @@ The same idempotency key with a different body:
 ```bash
 curl -sS -D - -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-happy-1' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":1,"unitPriceCents":499}]}'
 ```
@@ -397,7 +419,7 @@ An unknown order, and the same order read as another tenant, are both `404` with
 
 ```bash
 curl -sS -D - "localhost:3000/v1/orders/$ORDER_ID" \
-  -H 'x-tenant-id: 11111111-1111-4111-8111-111111111111'
+  -H "authorization: Bearer $BOB_TOKEN"
 ```
 
 ### Negative: the saga rejects the order
@@ -409,7 +431,7 @@ Ask for 9. That does not fit:
 ```bash
 curl -sS -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-short-1' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":9,"unitPriceCents":499}]}'
 ```
@@ -421,7 +443,7 @@ Place a smaller order and tell the payment port to decline. The port declines on
 ```bash
 curl -sS -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-decline-1' \
   -d '{"currency":"USD","paymentOutcome":"decline","lines":[{"sku":"GLV-100","quantity":3,"unitPriceCents":499}]}'
 ```
@@ -444,7 +466,7 @@ Stop the worker with Ctrl-C. Leave the API running. Place one more order that wo
 ```bash
 curl -sS -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-waiting-1' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":1,"unitPriceCents":499}]}'
 ```
@@ -456,7 +478,7 @@ For the timeout, stop the worker again and place a final order:
 ```bash
 curl -sS -X POST localhost:3000/v1/orders \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -H 'idempotency-key: manual-timeout-1' \
   -d '{"currency":"USD","lines":[{"sku":"GLV-100","quantity":1,"unitPriceCents":499}]}'
 ```
@@ -479,16 +501,16 @@ Register a product. Postgres stores the row and a 32-dimension embedding. The wo
 ```bash
 curl -sS -X POST localhost:3000/v1/catalog \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -d '{"sku":"GLV-100","name":"Nitrile exam gloves","description":"Powder-free nitrile gloves","unitPriceCents":499}'
 
 curl -sS -X POST localhost:3000/v1/catalog \
   -H 'content-type: application/json' \
-  -H "x-tenant-id: $TENANT" \
+  -H "authorization: Bearer $TOKEN" \
   -d '{"sku":"PAP-100","name":"Copy paper","description":"Letter size white ream","unitPriceCents":899}'
 
 curl -sS "localhost:3000/v1/catalog/search?q=nitrile%20gloves" \
-  -H "x-tenant-id: $TENANT"
+  -H "authorization: Bearer $TOKEN"
 ```
 
 The gloves row is first because the keyword hit outranks a nearer-or-farther vector on an unrelated product. The same search with another tenant id returns `"results":[]`.
@@ -499,16 +521,18 @@ After the funded order from the saga section reaches `allocated`, its timeline i
 
 ```bash
 curl -sS "localhost:3000/v1/orders/$ORDER_ID/timeline" \
-  -H "x-tenant-id: $TENANT"
+  -H "authorization: Bearer $TOKEN"
 ```
 
-`status` becomes `allocated`. `events` includes `OrderPlaced` and `PaymentCaptured`. Another tenant gets `404`.
+`status` becomes `allocated`. `events` includes `OrderPlaced` and `PaymentCaptured`. Another tenant, using `$BOB_TOKEN`, gets `404`.
+
+`GET /v1/audit` with Alice's token lists `order.place`, `stock.receive`, and `catalog.upsert`. `actorId` is the token's `sub`. Keycloak's `sub` is the user's internal id. Bob's audit list is empty.
 
 Throw the projections away and rebuild them from Postgres. This replaces only the caller's tenant:
 
 ```bash
 curl -sS -X POST localhost:3000/v1/projections/rebuild \
-  -H "x-tenant-id: $TENANT"
+  -H "authorization: Bearer $TOKEN"
 ```
 
 The body is `{ "catalog": <count>, "timelines": <count> }`. `GET` the product and the timeline again. Both come back from the tables, not from anything Mongo remembered. The read model is described in [docs/architecture/projections.md](docs/architecture/projections.md).
@@ -518,7 +542,7 @@ The body is `{ "catalog": <count>, "timelines": <count> }`. `GET` the product an
 0. Done. Order plus outbox, idempotency, CI.
 1. Done locally. Relay, inbox, saga, compensation, dead letters.
 2. Done locally. Mongo order timelines and catalog documents, rebuild from Postgres, pgvector search.
-3. Keycloak, tenant isolation, row-level security.
+3. Done locally. Keycloak bearer tokens, Postgres row-level security, and an audit log.
 4. Agent, approval inbox, fixture evals.
 5. Free-plan AWS. Apply only while you are using it, then destroy. See ADR 0008.
 6. k6, Toxiproxy, backup and restore.

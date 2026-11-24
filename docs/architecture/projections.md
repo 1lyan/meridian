@@ -10,4 +10,4 @@ Postgres remains the record. Two Mongo collections are disposable views of it.
 
 Search is `GET /v1/catalog/search`. It never reads Mongo. Keyword hits sort ahead of the rest, and pgvector cosine similarity breaks ties. The vector is a hashed bag of words, 32 dimensions, the same width as migration `0003`. A model can replace `embedText` later without a new collection.
 
-Every read and the rebuild take `x-tenant-id`. A tenant predicate is part of the Mongo filter because Mongo has no row-level security.
+Every read and the rebuild take the tenant from the bearer token. A tenant predicate is part of the Mongo filter because Mongo has no row-level security.

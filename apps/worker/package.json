@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@meridian/api": "workspace:*",
+    "@meridian/auth": "workspace:*",
     "@meridian/contracts": "workspace:*",
     "@meridian/testkit": "workspace:*",
     "@types/amqplib": "^0.10.7",

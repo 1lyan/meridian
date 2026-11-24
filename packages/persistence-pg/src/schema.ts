@@ -12,6 +12,7 @@ import {
 /**
  * Typed query surface for migrations 0001 and 0002. Column names must match those files.
  * Migration 0003 stores catalog embeddings as `vector(32)`, which stays in SQL.
+ * Migration 0004 adds row-level security and audit_log.
  * Checks and foreign keys are enforced by the SQL migration, which is what runs.
  */
 export const orders = pgTable(

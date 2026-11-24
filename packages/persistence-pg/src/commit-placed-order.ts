@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { OrderPlaced, PlacedOrder } from '@meridian/domain-ordering'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import type { Pool } from 'pg'
 import { IdempotencyConflictError } from './errors.js'
@@ -11,6 +11,7 @@ import {
   outbox,
   schema,
 } from './schema.js'
+import { appRole } from './tenant-session.js'
 
 export function createDatabase(pool: Pool) {
   return drizzle(pool, { schema })
@@ -30,6 +31,7 @@ export type CommitPlacedInput = {
     requestId: string
     traceparent?: string
   }
+  actorId: string
 }
 
 export type CommitPlacedResult =
@@ -53,6 +55,10 @@ async function commitOnce(
   input: CommitPlacedInput,
 ): Promise<CommitPlacedResult> {
   return db.transaction(async (tx) => {
+    await tx.execute(sql.raw(`SET LOCAL ROLE ${appRole}`))
+    await tx.execute(
+      sql`SELECT set_config('app.tenant_id', ${input.order.tenantId}, true)`,
+    )
     const existing = await tx
       .select()
       .from(idempotencyKeys)
@@ -130,6 +136,21 @@ async function commitOnce(
       responseBody: input.responseBody,
       createdAt: input.order.createdAt,
     })
+
+    await tx.execute(sql`
+      INSERT INTO audit_log
+        (id, tenant_id, actor_id, action, aggregate_type, aggregate_id, detail, created_at)
+      VALUES (
+        ${randomUUID()},
+        ${input.order.tenantId},
+        ${input.actorId},
+        'order.place',
+        'order',
+        ${input.order.id},
+        NULL,
+        ${input.order.createdAt}
+      )
+    `)
 
     return { outcome: 'created' as const }
   })
