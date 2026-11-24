@@ -1,8 +1,8 @@
 # Repository map
 
 ```
-apps/api          HTTP composition root. Phase 0 place-order route.
-apps/worker       Outbox relay and consumers. Phase 1.
+apps/api          HTTP composition root. Orders, catalog, search, and projection rebuild.
+apps/worker       Outbox relay, saga, and projection consumer.
 apps/agent        Untrusted tool loop. Phase 4.
 apps/web          Order timeline and approval inbox. Phase 4.
 packages/kernel   Branded ids and DomainError.
@@ -12,13 +12,13 @@ packages/contracts
 packages/persistence-pg
                   Drizzle queries and the SQL migrations that actually run.
 packages/persistence-mongo
-                  Projection names. Phase 2.
+                  Rebuildable catalog and order-timeline documents.
 packages/messaging
                   Exchange, routing key, and queue names. Phase 1 opens the broker.
 packages/auth     IdentityProvider port. Phase 3.
 packages/observability
                   Logger used by workers. The API uses Fastify's logger.
-packages/testkit  Postgres testcontainer shared by integration tests.
+packages/testkit  Postgres, RabbitMQ, and Mongo testcontainers.
 infra/compose     Local brokers and databases.
 infra/terraform   Phase 5. Do not apply during phase 0.
 ```

@@ -13,4 +13,4 @@ flowchart TB
   api --> pg
 ```
 
-Phase 0 is the write in that diagram. `POST /v1/orders` commits the order and an unpublished outbox row in one transaction. The relay, the saga, the projections, the identity port, the agent, and AWS are the later phases. Decisions are in `docs/adr/`. The transaction itself is described in [place-order.md](place-order.md).
+`POST /v1/orders` commits the order and an unpublished outbox row in one transaction. The relay and the saga are described in [saga.md](saga.md). Catalog documents and order timelines are rebuilt from Postgres, and catalog search uses pgvector; both are described in [projections.md](projections.md). The identity port, the agent, and AWS are the later phases. Decisions are in `docs/adr/`. The transaction itself is described in [place-order.md](place-order.md).

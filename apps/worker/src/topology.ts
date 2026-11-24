@@ -41,7 +41,13 @@ export async function assertTopology(channel: Channel): Promise<void> {
       'x-dead-letter-exchange': exchanges.deadLetter,
     },
   })
-  for (const pattern of ['order.*', 'inventory.*', 'billing.*', 'payment.*']) {
+  for (const pattern of [
+    'order.*',
+    'inventory.*',
+    'billing.*',
+    'payment.*',
+    'catalog.*',
+  ]) {
     await channel.bindQueue(queues.orderProcess, exchanges.orders, pattern)
   }
 }

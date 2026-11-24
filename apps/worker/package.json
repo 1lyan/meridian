@@ -17,8 +17,10 @@
     "@meridian/kernel": "workspace:*",
     "@meridian/messaging": "workspace:*",
     "@meridian/observability": "workspace:*",
+    "@meridian/persistence-mongo": "workspace:*",
     "@meridian/persistence-pg": "workspace:*",
     "amqplib": "^0.10.8",
+    "mongodb": "^6.20.0",
     "pg": "^8.16.3",
     "zod": "^3.25.76"
   },

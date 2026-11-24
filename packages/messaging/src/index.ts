@@ -14,6 +14,7 @@ export const routingKeys = {
   paymentCaptured: 'payment.captured',
   paymentFailed: 'payment.failed',
   releaseReservation: 'inventory.release',
+  catalogUpserted: 'catalog.upserted',
 } as const
 
 export const queues = {
@@ -31,6 +32,7 @@ export const routingKeyByType = {
   PaymentCaptured: routingKeys.paymentCaptured,
   PaymentFailed: routingKeys.paymentFailed,
   ReleaseReservation: routingKeys.releaseReservation,
+  CatalogUpserted: routingKeys.catalogUpserted,
 } as const
 
 export type OutboxMessageType = keyof typeof routingKeyByType

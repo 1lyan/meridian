@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@testcontainers/mongodb": "^11.7.0",
     "@testcontainers/postgresql": "^11.7.0",
     "@testcontainers/rabbitmq": "^11.7.0",
     "testcontainers": "^11.7.0"

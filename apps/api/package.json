@@ -17,10 +17,13 @@
   },
   "dependencies": {
     "@meridian/contracts": "workspace:*",
+    "@meridian/domain-catalog": "workspace:*",
     "@meridian/domain-ordering": "workspace:*",
+    "@meridian/persistence-mongo": "workspace:*",
     "@meridian/kernel": "workspace:*",
     "@meridian/persistence-pg": "workspace:*",
     "fastify": "^5.6.1",
+    "mongodb": "^6.20.0",
     "pg": "^8.16.3",
     "zod": "^3.25.76"
   },

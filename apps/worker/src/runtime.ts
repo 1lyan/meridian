@@ -8,7 +8,7 @@ import { createLogger } from '@meridian/observability'
 import { rejectExpiredPlacedOrders } from '@meridian/persistence-pg'
 import type { ConsumeMessage } from 'amqplib'
 import type { Pool } from 'pg'
-import { dispatch, parseIncoming } from './dispatch.js'
+import { dispatch, type IncomingMessage, parseIncoming } from './dispatch.js'
 import { type PaymentPort, scriptedPayment } from './payment.js'
 import { relayOnce } from './relay.js'
 import { attemptOf, connectBroker } from './topology.js'
@@ -28,6 +28,7 @@ export async function startWorker(options: {
   reservationTimeoutMs?: number
   pollMs?: number
   payment?: PaymentPort
+  project?: (message: IncomingMessage) => Promise<void>
 }): Promise<Worker> {
   const log = createLogger('worker')
   const timeoutMs = options.reservationTimeoutMs ?? 15_000
@@ -46,7 +47,9 @@ export async function startWorker(options: {
   const handle = async (message: ConsumeMessage) => {
     const attempt = attemptOf(message)
     try {
-      await dispatch(options.pool, parseIncoming(message.content), payment)
+      const incoming = parseIncoming(message.content)
+      await dispatch(options.pool, incoming, payment)
+      if (options.project) await options.project(incoming)
       broker.consumeChannel.ack(message)
     } catch (error) {
       log.error({ err: error, attempt }, 'delivery failed')

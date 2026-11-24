@@ -1,4 +1,16 @@
 export type {
+  CatalogProductRecord,
+  CatalogSearchHit,
+  StoredTimeline,
+} from './catalog-store.js'
+export {
+  listCatalogProducts,
+  listOrderTimelines,
+  loadCatalogProduct,
+  searchCatalog,
+  upsertCatalogProduct,
+} from './catalog-store.js'
+export type {
   CommitPlacedInput,
   CommitPlacedResult,
   Database,

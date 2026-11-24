@@ -55,3 +55,21 @@ export const receiveStockBody = z
   .strict()
 
 export type ReceiveStockBody = z.infer<typeof receiveStockBody>
+
+export const upsertCatalogBody = z
+  .object({
+    sku: z.string().trim().min(1).max(64),
+    name: z.string().trim().min(1).max(200),
+    description: z.string().trim().min(1).max(2000),
+    unitPriceCents: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export type UpsertCatalogBody = z.infer<typeof upsertCatalogBody>
+
+export const catalogSearchQuery = z.object({
+  q: z.string().trim().min(1).max(200),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+})
+
+export type CatalogSearchQuery = z.infer<typeof catalogSearchQuery>

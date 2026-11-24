@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@meridian/domain-billing": "workspace:*",
+    "@meridian/domain-catalog": "workspace:*",
     "@meridian/domain-inventory": "workspace:*",
     "@meridian/domain-ordering": "workspace:*",
     "@meridian/kernel": "workspace:*",

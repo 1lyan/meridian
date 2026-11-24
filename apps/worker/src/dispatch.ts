@@ -69,6 +69,8 @@ export async function dispatch(
       return handleCollectPayment(pool, message, headers, payment)
     case 'ReleaseReservation':
       return handleRelease(pool, message)
+    case 'CatalogUpserted':
+      return
     default:
       throw new Error(`Unhandled message type ${message.type}`)
   }

@@ -17,6 +17,7 @@ describe('delivery disposition', () => {
   it('routes each saga type to its own key', () => {
     expect(routingKeyFor('OrderPlaced')).toBe('order.placed')
     expect(routingKeyFor('ReleaseReservation')).toBe('inventory.release')
+    expect(routingKeyFor('CatalogUpserted')).toBe('catalog.upserted')
     expect(() => routingKeyFor('Nope')).toThrow(/Nope/)
   })
 })
