@@ -15,4 +15,4 @@ The outbox relay and the reservation sweeper stay on the table owner. They have 
 
 Mongo and catalog search repeat the tenant predicate. They do not inherit the Postgres policy. `GET /v1/audit` lists who placed an order, received stock, upserted a product, or moved the saga, for the caller's tenant only.
 
-Agent runs are not stored yet. The same tenant predicate will apply when they are.
+`GET /v1/approvals` and `GET /v1/agent-runs/:id` use the same role and the same Mongo tenant predicate. A tenant cannot read another tenant's approval or agent run.

@@ -1,0 +1,96 @@
+:root {
+  color: #1c2421;
+  background: #f4f1ea;
+  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  line-height: 1.45;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+h1,
+h2 {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.lede {
+  margin-top: 0;
+  color: #3d4a45;
+}
+
+section {
+  margin-top: 2rem;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
+input,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c9c2b4;
+  background: #fffdf8;
+  color: inherit;
+  font: inherit;
+  padding: 0.55rem 0.65rem;
+}
+
+textarea {
+  min-height: 4.5rem;
+}
+
+button {
+  font: inherit;
+  border: 1px solid #1f4d3a;
+  background: #1f4d3a;
+  color: #f4f1ea;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: #1f4d3a;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.card {
+  border-top: 1px solid #d9d2c5;
+  padding: 0.9rem 0;
+}
+
+.card p {
+  margin: 0.2rem 0;
+}
+
+.error {
+  background: #f8e8e4;
+  border: 1px solid #a33b32;
+  padding: 0.6rem 0.75rem;
+}
+
+.muted {
+  color: #5c675f;
+}

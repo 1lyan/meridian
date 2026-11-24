@@ -2,7 +2,7 @@
 
 Meridian is a multi-tenant clinical supply control plane. Clinics order supplies against contract prices. The domain has tenants, catalogs, stock, orders, a ledger, and approvals. It has no patient, prescription, or clinical record.
 
-Postgres is the system of record. MongoDB will hold rebuildable documents. RabbitMQ will carry the saga. The agent will propose writes, and a person will approve them before the core commits.
+Postgres is the system of record. MongoDB will hold rebuildable documents. RabbitMQ will carry the saga. The agent proposes writes, and a person approves them before the core commits.
 
 ```mermaid
 flowchart TB

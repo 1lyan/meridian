@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@meridian/domain-approvals": "workspace:*",
     "@meridian/domain-billing": "workspace:*",
     "@meridian/domain-catalog": "workspace:*",
     "@meridian/domain-inventory": "workspace:*",

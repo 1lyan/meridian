@@ -73,3 +73,68 @@ export const catalogSearchQuery = z.object({
 })
 
 export type CatalogSearchQuery = z.infer<typeof catalogSearchQuery>
+
+const proposalLine = z
+  .object({
+    sku: z.string().trim().min(1).max(64),
+    quantity: z.number().int().positive(),
+  })
+  .strict()
+
+export const approvalBody = z
+  .object({
+    currency: z.literal('USD'),
+    lines: z
+      .array(proposalLine)
+      .min(1)
+      .max(100)
+      .superRefine((lines, context) => {
+        const seen = new Set<string>()
+        for (const line of lines) {
+          if (seen.has(line.sku)) {
+            context.addIssue({
+              code: 'custom',
+              message: `Duplicate sku ${line.sku}`,
+            })
+          }
+          seen.add(line.sku)
+        }
+      }),
+  })
+  .strict()
+
+export type ApprovalBody = z.infer<typeof approvalBody>
+
+export const approvalDecisionBody = z
+  .object({
+    decision: z.enum(['approve', 'reject']),
+  })
+  .strict()
+
+export type ApprovalDecisionBody = z.infer<typeof approvalDecisionBody>
+
+export const agentRunBody = z
+  .object({
+    promptVersion: z.string().trim().min(1).max(40),
+    status: z.enum(['completed', 'blocked']),
+    request: z.string().trim().min(1).max(2000),
+    transcript: z.array(z.unknown()).max(40),
+    blockedReason: z.string().trim().min(1).max(80).nullable(),
+    approvalId: z.string().uuid().nullable(),
+  })
+  .strict()
+
+export type AgentRunBody = z.infer<typeof agentRunBody>
+
+export const quoteQuery = z.object({
+  sku: z.string().trim().min(1).max(64),
+  quantity: z.coerce.number().int().positive().max(10_000),
+})
+
+export type QuoteQuery = z.infer<typeof quoteQuery>
+
+export const availabilityQuery = z.object({
+  sku: z.string().trim().min(1).max(64),
+})
+
+export type AvailabilityQuery = z.infer<typeof availabilityQuery>

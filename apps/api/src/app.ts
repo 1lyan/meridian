@@ -16,6 +16,7 @@ import type { Projections } from '@meridian/persistence-mongo'
 import {
   createDatabase,
   IdempotencyConflictError,
+  listAgentRuns,
   listAudit,
   listCatalogProducts,
   listOrderTimelines,
@@ -31,7 +32,10 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify'
 import type { Pool } from 'pg'
+import { registerBuyerRoutes } from './buyer.js'
 import { placeOrder } from './place-order.js'
+
+const webOrigins = new Set(['http://localhost:5173', 'http://127.0.0.1:5173'])
 
 export type BuildAppOptions = {
   pool: Pool
@@ -61,6 +65,21 @@ export async function buildApp(
   const db = createDatabase(options.pool)
   const now = options.now ?? (() => new Date())
 
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin
+    if (typeof origin !== 'string' || !webOrigins.has(origin)) return
+    reply.header('access-control-allow-origin', origin)
+    reply.header('vary', 'origin')
+    reply.header(
+      'access-control-allow-headers',
+      'authorization, content-type, idempotency-key',
+    )
+    reply.header('access-control-allow-methods', 'GET, POST, OPTIONS')
+    if (request.method === 'OPTIONS') {
+      return reply.code(204).send()
+    }
+  })
+
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof IdempotencyConflictError) {
       return reply
@@ -73,8 +92,14 @@ export async function buildApp(
         .send({ error: { code: error.code, message: error.message } })
     }
     if (error instanceof DomainError) {
+      const status =
+        error.code === 'not_found'
+          ? 404
+          : error.code === 'invalid_transition'
+            ? 409
+            : 422
       return reply
-        .code(422)
+        .code(status)
         .send({ error: { code: error.code, message: error.message } })
     }
     request.log.error(error)
@@ -268,12 +293,13 @@ export async function buildApp(
     if (!caller) return reply
     const projections = requireProjections(options.projections, reply)
     if (!projections) return reply
-    const { products, timelines } = await withTenant(
+    const { products, timelines, runs } = await withTenant(
       options.pool,
       caller.tenantId,
       async (client) => ({
         products: await listCatalogProducts(client, caller.tenantId),
         timelines: await listOrderTimelines(client, caller.tenantId),
+        runs: await listAgentRuns(client),
       }),
     )
     const counts = await projections.replaceTenant(
@@ -293,8 +319,27 @@ export async function buildApp(
         rejectionReason: timeline.rejectionReason,
         events: timeline.events,
       })),
+      runs.map((run) => ({
+        tenantId: run.tenantId,
+        runId: run.id,
+        promptVersion: run.promptVersion,
+        status: run.status,
+        request: run.request,
+        blockedReason: run.blockedReason,
+        approvalId: run.approvalId,
+        createdAt: run.createdAt,
+      })),
     )
     return counts
+  })
+
+  registerBuyerRoutes(app, {
+    pool: options.pool,
+    db,
+    ...(options.projections ? { projections: options.projections } : {}),
+    now,
+    authenticate: (request, reply) =>
+      authenticate(options.identity, request, reply),
   })
 
   app.get('/v1/audit', async (request, reply) => {

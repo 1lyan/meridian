@@ -1,6 +1,6 @@
 # Meridian
 
-Multi-tenant clinical supply control plane. Placing an order commits the order and an outbox row together. A local worker publishes that row to RabbitMQ and runs the saga: reserve stock, capture or decline payment, and release the reservation when payment declines. The same worker writes Mongo projections that can be rebuilt from Postgres, and catalog search uses pgvector. Identity, the agent, and AWS come later. The decisions are in [docs/adr](docs/adr). The saga is described in [docs/architecture/saga.md](docs/architecture/saga.md). The read side is described in [docs/architecture/projections.md](docs/architecture/projections.md).
+Multi-tenant clinical supply control plane. Placing an order commits the order and an outbox row together. A local worker publishes that row to RabbitMQ and runs the saga: reserve stock, capture or decline payment, and release the reservation when payment declines. The same worker writes Mongo projections that can be rebuilt from Postgres, and catalog search uses pgvector. The agent can propose an order, and a person approves it before the core commits. AWS comes later. The decisions are in [docs/adr](docs/adr). The saga is described in [docs/architecture/saga.md](docs/architecture/saga.md). The read side is described in [docs/architecture/projections.md](docs/architecture/projections.md). The agent is described in [docs/architecture/agent.md](docs/architecture/agent.md).
 
 There is no patient data in this system.
 
@@ -13,7 +13,7 @@ Money is integer cents. `499` is $4.99. The tenant is the `tenant_id` claim in a
 - Docker, with the daemon running. Compose runs RabbitMQ, and the integration tests start their own Postgres and RabbitMQ.
 - PostgreSQL that accepts `postgres://meridian:meridian@localhost:5432/meridian`. The `meridian` role is a superuser, because creating the `vector` extension requires one. The database also needs `pgcrypto`.
 - RabbitMQ at `amqp://guest:guest@localhost:5672`.
-- MongoDB at `mongodb://localhost:27017/meridian`. Catalog documents and order timelines are projections. Search stays in Postgres.
+- MongoDB at `mongodb://localhost:27017/meridian`. Catalog documents, order timelines, and agent runs are projections. Search stays in Postgres.
 
 The first migration creates `pgcrypto` and `vector`. `pgcrypto` is part of PostgreSQL. `vector` is [pgvector](https://github.com/pgvector/pgvector) and has to be installed on the server before that statement can succeed. When a later change needs another binary, port, role, database, or extension, add the install command and the console commands to this section in the same change.
 
@@ -36,13 +36,15 @@ MONGO_URL=mongodb://localhost:27017/meridian
 KEYCLOAK_ISSUER=http://localhost:8080/realms/meridian
 KEYCLOAK_AUDIENCE=meridian-api
 PORT=3000
+API_URL=http://localhost:3000
+AGENT_PORT=3001
 LOG_LEVEL=info
 RESERVATION_TIMEOUT_MS=15000
 ```
 
 `RESERVATION_TIMEOUT_MS` is how long a `placed` order may wait for a reservation before the worker rejects it. The default is 15 seconds.
 
-The API and the worker read those variables from the process environment. The API also requires `KEYCLOAK_ISSUER` and `KEYCLOAK_AUDIENCE`. Both processes require `MONGO_URL`. Copying `.env` does not load it. Run this in every terminal that starts the API, the worker, or migrations:
+The API and the worker read those variables from the process environment. The API also requires `KEYCLOAK_ISSUER` and `KEYCLOAK_AUDIENCE`. Both processes require `MONGO_URL`. The agent process listens on `AGENT_PORT` (3001) and calls the API at `API_URL`. The inbox UI is Vite on port 5173 (`pnpm dev:web`). No extra binary, role, database, or extension is required for the agent. Copying `.env` does not load it. Run this in every terminal that starts the API, the worker, the agent, or migrations:
 
 ```bash
 set -a
@@ -202,7 +204,20 @@ set -a && source .env && set +a
 pnpm dev:worker
 ```
 
-`GET /health` returns `{"status":"ok","postgres":"ok"}` when the API can reach Postgres. It does not require a token. Every other route does.
+Terminal 3, the agent. It calls the API with the same bearer token the buyer sent:
+
+```bash
+set -a && source .env && set +a
+pnpm dev:agent
+```
+
+Terminal 4, the approval inbox at `http://localhost:5173`:
+
+```bash
+pnpm dev:web
+```
+
+`GET /health` on port 3000 returns `{"status":"ok","postgres":"ok"}` when the API can reach Postgres. It does not require a token. Every other API route does. `GET http://localhost:3001/health` is the agent process.
 
 Keycloak imports the `meridian` realm on startup. Alice's token carries tenant `6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b`. Bob's token carries `11111111-1111-4111-8111-111111111111`. Ask Keycloak for a token after the API is up:
 
@@ -535,7 +550,26 @@ curl -sS -X POST localhost:3000/v1/projections/rebuild \
   -H "authorization: Bearer $TOKEN"
 ```
 
-The body is `{ "catalog": <count>, "timelines": <count> }`. `GET` the product and the timeline again. Both come back from the tables, not from anything Mongo remembered. The read model is described in [docs/architecture/projections.md](docs/architecture/projections.md).
+The body is `{ "catalog": <count>, "timelines": <count>, "agentRuns": <count> }`. `GET` the product and the timeline again. Both come back from the tables, not from anything Mongo remembered. The read model is described in [docs/architecture/projections.md](docs/architecture/projections.md).
+
+## Agent and the approval inbox
+
+The agent does not place orders. It searches, checks stock, quotes the catalog price, and writes an approval. Approving in the inbox places the order. Run `pnpm migrate` so the `approvals` and `agent_runs` tables exist, then keep the API, the worker, and the agent running. Use the stock and catalog steps above so `GLV-100` is searchable and available.
+
+Ask the agent, still with Alice's token:
+
+```bash
+curl -sS -X POST localhost:3001/runs \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $TOKEN" \
+  -d '{"message":"nitrile gloves"}'
+```
+
+Expect `"status":"completed"`, `"promptVersion":"buyer-1"`, and an `approvalId`. No order exists yet. Open `http://localhost:5173`, paste `$TOKEN`, and choose Load inbox. The row is `proposed` at the catalog price. Approve. The page shows an order id, and `GET /v1/orders/$ORDER_ID` is `placed`. With the worker running and stock on hand, the saga then reserves and allocates it. The timeline page loads that order id.
+
+Bob's token loads an empty inbox. `GET /v1/approvals/$APPROVAL_ID` and `GET /v1/agent-runs/$RUN_ID` with `$BOB_TOKEN` are `404`. A call to the agent with no token is `401` and `"code":"unauthenticated"`.
+
+`pnpm --filter @meridian/agent test` is the fixture suite. It fails the run if the model invents a sku, omits the tenant, calls `placeOrder`, or follows an instruction planted in a product description. The nightly workflow is the only job that can call Bedrock, and that call is capped at 256 tokens. The agent is described in [docs/architecture/agent.md](docs/architecture/agent.md).
 
 ## Phases
 
@@ -543,6 +577,6 @@ The body is `{ "catalog": <count>, "timelines": <count> }`. `GET` the product an
 1. Done locally. Relay, inbox, saga, compensation, dead letters.
 2. Done locally. Mongo order timelines and catalog documents, rebuild from Postgres, pgvector search.
 3. Done locally. Keycloak bearer tokens, Postgres row-level security, and an audit log.
-4. Agent, approval inbox, fixture evals.
+4. Done locally. Agent tools, approval inbox, and fixture evals. The nightly Bedrock call stays capped and is not part of pull-request CI.
 5. Free-plan AWS. Apply only while you are using it, then destroy. See ADR 0008.
 6. k6, Toxiproxy, backup and restore.

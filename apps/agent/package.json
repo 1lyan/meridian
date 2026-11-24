@@ -7,10 +7,23 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "eval:nightly": "tsx src/nightly.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.940.0",
+    "@meridian/auth": "workspace:*",
+    "@meridian/domain-approvals": "workspace:*",
+    "@meridian/kernel": "workspace:*",
+    "fastify": "^5.6.1"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "pnpm --filter @meridian/api dev",
     "dev:worker": "pnpm --filter @meridian/worker dev",
+    "dev:agent": "pnpm --filter @meridian/agent dev",
+    "dev:web": "pnpm --filter @meridian/web dev",
     "compose:up": "docker compose up -d --wait",
     "compose:down": "docker compose down",
     "typecheck": "turbo typecheck",

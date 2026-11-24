@@ -1,5 +1,6 @@
 export { type ProjectionName, projectionNames } from './names.js'
 export type {
+  AgentRunDocument,
   CatalogDocument,
   Projections,
   TimelineDocument,
