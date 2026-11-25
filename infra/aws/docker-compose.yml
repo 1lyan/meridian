@@ -1,0 +1,103 @@
+name: meridian
+
+services:
+  rabbitmq:
+    image: rabbitmq:4
+    mem_limit: 384m
+    restart: unless-stopped
+    logging: &awslogs
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /meridian/rabbitmq
+
+  redis:
+    image: redis:7
+    mem_limit: 64m
+    restart: unless-stopped
+    logging:
+      <<: *awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /meridian/redis
+
+  api:
+    image: ${ECR_REGISTRY}/meridian-api:${IMAGE_TAG}
+    mem_limit: 320m
+    restart: unless-stopped
+    environment: &app_env
+      DATABASE_URL: ${DATABASE_URL}
+      MONGO_URL: ${MONGO_URL}
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672
+      IDENTITY_ISSUER: ${IDENTITY_ISSUER}
+      IDENTITY_AUDIENCE: ${IDENTITY_AUDIENCE}
+      API_URL: http://api:3000
+      HOST: 0.0.0.0
+      PORT: "3000"
+      LOG_LEVEL: info
+      RESERVATION_TIMEOUT_MS: "15000"
+      AWS_REGION: ${AWS_REGION}
+    depends_on:
+      - rabbitmq
+    logging:
+      <<: *awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /meridian/api
+
+  worker:
+    image: ${ECR_REGISTRY}/meridian-worker:${IMAGE_TAG}
+    mem_limit: 320m
+    restart: unless-stopped
+    environment:
+      <<: *app_env
+    depends_on:
+      - rabbitmq
+      - api
+    logging:
+      <<: *awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /meridian/worker
+
+  agent:
+    image: ${ECR_REGISTRY}/meridian-agent:${IMAGE_TAG}
+    mem_limit: 256m
+    restart: unless-stopped
+    environment:
+      <<: *app_env
+      AGENT_PORT: "3001"
+    depends_on:
+      - api
+    logging:
+      <<: *awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /meridian/agent
+
+  edge:
+    image: ${ECR_REGISTRY}/meridian-edge:${IMAGE_TAG}
+    mem_limit: 64m
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+      - agent
+    logging:
+      <<: *awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /meridian/edge
+
+  xray:
+    image: public.ecr.aws/xray/aws-xray-daemon:3.3.13
+    mem_limit: 64m
+    restart: unless-stopped
+    environment:
+      AWS_REGION: ${AWS_REGION}
+    logging:
+      <<: *awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /meridian/xray

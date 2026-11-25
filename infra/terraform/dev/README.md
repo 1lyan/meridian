@@ -1,5 +1,7 @@
 # Dev stack
 
-Phase 5. Do not apply this stack during phase 0.
+One VPC with public subnets and no NAT gateway, one `t4g.small`, RDS Postgres `db.t4g.micro` closed to the instance security group, one Elastic IP, ECR, Cognito, SSM, and CloudWatch. Terraform refuses `enable_nat = true`. The apply role is also denied `ec2:CreateNatGateway`.
 
-The applied shape is one VPC without a NAT gateway, one `t4g.small`, RDS Postgres `db.t4g.micro`, and an Elastic IP. Terraform will refuse a NAT gateway. Apply it only while you are using it, then destroy it. A stopped RDS instance is not the off switch: AWS restarts it after seven days. See ADR 0008.
+Apply it from the `dev-apply` workflow while you are using it, then run `dev-destroy`. A stopped database is not the off switch. See [docs/runbooks/dev-stack.md](../../../docs/runbooks/dev-stack.md) and ADR 0008.
+
+State is in the bootstrap bucket. This directory does not apply itself.

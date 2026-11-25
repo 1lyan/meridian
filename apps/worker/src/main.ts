@@ -1,4 +1,7 @@
-import { createProjections } from '@meridian/persistence-mongo'
+import {
+  createProjections,
+  mongoClientOptions,
+} from '@meridian/persistence-mongo'
 import { migrate } from '@meridian/persistence-pg'
 import { MongoClient } from 'mongodb'
 import { Pool } from 'pg'
@@ -13,7 +16,7 @@ if (!rabbitUrl) throw new Error('RABBIT_URL is required')
 if (!mongoUrl) throw new Error('MONGO_URL is required')
 
 const pool = new Pool({ connectionString: databaseUrl })
-const mongo = new MongoClient(mongoUrl, { directConnection: true })
+const mongo = new MongoClient(mongoUrl, mongoClientOptions(mongoUrl))
 await mongo.connect()
 const projections = createProjections(mongo.db('meridian'))
 await projections.ensureIndexes()

@@ -1,6 +1,6 @@
 # Meridian
 
-Multi-tenant clinical supply control plane. Placing an order commits the order and an outbox row together. A local worker publishes that row to RabbitMQ and runs the saga: reserve stock, capture or decline payment, and release the reservation when payment declines. The same worker writes Mongo projections that can be rebuilt from Postgres, and catalog search uses pgvector. The agent can propose an order, and a person approves it before the core commits. AWS comes later. The decisions are in [docs/adr](docs/adr). The saga is described in [docs/architecture/saga.md](docs/architecture/saga.md). The read side is described in [docs/architecture/projections.md](docs/architecture/projections.md). The agent is described in [docs/architecture/agent.md](docs/architecture/agent.md).
+Multi-tenant clinical supply control plane. Placing an order commits the order and an outbox row together. A local worker publishes that row to RabbitMQ and runs the saga: reserve stock, capture or decline payment, and release the reservation when payment declines. The same worker writes Mongo projections that can be rebuilt from Postgres, and catalog search uses pgvector. The agent can propose an order, and a person approves it before the core commits. The AWS dev stack is written and is not applied from this repository. The decisions are in [docs/adr](docs/adr). The saga is described in [docs/architecture/saga.md](docs/architecture/saga.md). The read side is described in [docs/architecture/projections.md](docs/architecture/projections.md). The agent is described in [docs/architecture/agent.md](docs/architecture/agent.md).
 
 There is no patient data in this system.
 
@@ -571,6 +571,21 @@ Bob's token loads an empty inbox. `GET /v1/approvals/$APPROVAL_ID` and `GET /v1/
 
 `pnpm --filter @meridian/agent test` is the fixture suite. It fails the run if the model invents a sku, omits the tenant, calls `placeOrder`, or follows an instruction planted in a product description. The nightly workflow is the only job that can call Bedrock, and that call is capped at 256 tokens. The agent is described in [docs/architecture/agent.md](docs/architecture/agent.md).
 
+## AWS dev stack
+
+Local `pnpm dev` does not need AWS. The dev stack is a separate `t4g.small` and an RDS database, applied only while you are using it. It costs about a dollar a day and is destroyed afterwards.
+
+Install the tools before the first bootstrap:
+
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/terraform awscli
+terraform version
+aws --version
+```
+
+The account, the Atlas M0 allowlist, the GitHub variables, and the apply and destroy workflows are in [docs/runbooks/dev-stack.md](docs/runbooks/dev-stack.md). Bootstrap is the only Terraform you run on your machine. `dev-apply` and `dev-destroy` are manual GitHub Actions. Pull requests do not apply either stack.
+
 ## Phases
 
 0. Done. Order plus outbox, idempotency, CI.
@@ -578,5 +593,5 @@ Bob's token loads an empty inbox. `GET /v1/approvals/$APPROVAL_ID` and `GET /v1/
 2. Done locally. Mongo order timelines and catalog documents, rebuild from Postgres, pgvector search.
 3. Done locally. Keycloak bearer tokens, Postgres row-level security, and an audit log.
 4. Done locally. Agent tools, approval inbox, and fixture evals. The nightly Bedrock call stays capped and is not part of pull-request CI.
-5. Free-plan AWS. Apply only while you are using it, then destroy. See ADR 0008.
+5. Done as code, not applied. Free-plan Terraform, GitHub OIDC, and apply/destroy workflows. See [docs/runbooks/dev-stack.md](docs/runbooks/dev-stack.md).
 6. k6, Toxiproxy, backup and restore.

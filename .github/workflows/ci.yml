@@ -25,3 +25,15 @@ jobs:
       - run: pnpm boundaries
       - run: pnpm test
       - run: pnpm test:integration
+
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=infra/terraform/bootstrap init -backend=false -input=false
+      - run: terraform -chdir=infra/terraform/bootstrap validate
+      - run: terraform -chdir=infra/terraform/dev init -backend=false -input=false
+      - run: terraform -chdir=infra/terraform/dev validate
+      - run: terraform fmt -check -recursive infra/terraform

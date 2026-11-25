@@ -1,0 +1,3 @@
+region            = "us-east-1"
+github_repository = "1lyan/meridian"
+budget_email      = "you@example.com"

@@ -1,0 +1,16 @@
+:80 {
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+	handle /health {
+		reverse_proxy api:3000
+	}
+	handle /runs* {
+		reverse_proxy agent:3001
+	}
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+}

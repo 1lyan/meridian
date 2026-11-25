@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createTestIdentity, UnauthenticatedError } from './index.js'
+import {
+  createTestIdentity,
+  defaultJwksUrl,
+  identityConfigFromEnv,
+  UnauthenticatedError,
+} from './index.js'
 
 const tenantId = '6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b'
 
@@ -27,5 +32,27 @@ describe('bearer tokens', () => {
     await expect(identity.verify('not-a-token')).rejects.toBeInstanceOf(
       UnauthenticatedError,
     )
+  })
+
+  it('accepts a Cognito access token whose audience is client_id', async () => {
+    const { identity, sign } = await createTestIdentity()
+    const actor = await identity.verify(
+      await sign({ tenantId, subject: 'alice', useClientId: true }),
+    )
+    expect(actor.tenantId).toBe(tenantId)
+    expect(
+      defaultJwksUrl('https://cognito-idp.us-east-1.amazonaws.com/pool'),
+    ).toBe(
+      'https://cognito-idp.us-east-1.amazonaws.com/pool/.well-known/jwks.json',
+    )
+    expect(
+      identityConfigFromEnv({
+        IDENTITY_ISSUER: 'https://cognito-idp.us-east-1.amazonaws.com/pool',
+        IDENTITY_AUDIENCE: 'client',
+      }),
+    ).toEqual({
+      issuer: 'https://cognito-idp.us-east-1.amazonaws.com/pool',
+      audience: 'client',
+    })
   })
 })

@@ -20,7 +20,8 @@ packages/observability
                   Logger used by workers. The API uses Fastify's logger.
 packages/testkit  Postgres, RabbitMQ, and Mongo testcontainers.
 infra/compose     Local brokers and databases.
-infra/terraform   Phase 5. Do not apply during phase 0.
+infra/aws         Images and the compose file the EC2 instance runs.
+infra/terraform   Bootstrap and the dev stack. Apply only from the runbook.
 ```
 
 `dependency-cruiser` rejects a domain import of an adapter or of Fastify, Drizzle, `pg`, Zod, or Pino.

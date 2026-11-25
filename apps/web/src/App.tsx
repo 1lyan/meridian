@@ -21,12 +21,20 @@ type Timeline = {
 
 const params = new URLSearchParams(window.location.search)
 
+function defaultApiBase(): string {
+  const fromQuery = params.get('api')
+  if (fromQuery) return fromQuery
+  const stored = localStorage.getItem('meridian.api')
+  if (stored) return stored
+  if (import.meta.env.VITE_API_URL === '') return window.location.origin
+  if (typeof import.meta.env.VITE_API_URL === 'string') {
+    return import.meta.env.VITE_API_URL
+  }
+  return 'http://localhost:3000'
+}
+
 export function App() {
-  const [apiBase, setApiBase] = useState(
-    params.get('api') ??
-      localStorage.getItem('meridian.api') ??
-      'http://localhost:3000',
-  )
+  const [apiBase, setApiBase] = useState(defaultApiBase)
   const [token, setToken] = useState(
     params.get('token') ?? localStorage.getItem('meridian.token') ?? '',
   )

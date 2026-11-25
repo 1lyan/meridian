@@ -30,14 +30,40 @@ export class UnauthenticatedError extends Error {
   }
 }
 
+export function defaultJwksUrl(issuer: string): string {
+  const base = issuer.replace(/\/$/, '')
+  if (base.includes('://cognito-idp.')) {
+    return `${base}/.well-known/jwks.json`
+  }
+  return `${base}/protocol/openid-connect/certs`
+}
+
+/** Keycloak env names still work. AWS sets the IDENTITY_* names. */
+export function identityConfigFromEnv(env: NodeJS.ProcessEnv): {
+  issuer: string
+  audience: string
+  jwksUrl?: string
+} {
+  const issuer = env.IDENTITY_ISSUER ?? env.KEYCLOAK_ISSUER
+  const audience = env.IDENTITY_AUDIENCE ?? env.KEYCLOAK_AUDIENCE
+  const jwksUrl = env.IDENTITY_JWKS_URL ?? env.KEYCLOAK_JWKS_URL
+  if (!issuer) throw new Error('IDENTITY_ISSUER or KEYCLOAK_ISSUER is required')
+  if (!audience) {
+    throw new Error('IDENTITY_AUDIENCE or KEYCLOAK_AUDIENCE is required')
+  }
+  return {
+    issuer,
+    audience,
+    ...(jwksUrl !== undefined && jwksUrl.length > 0 ? { jwksUrl } : {}),
+  }
+}
+
 export function createJwksIdentity(options: {
   issuer: string
   audience: string
   jwksUrl?: string
 }): IdentityProvider {
-  const jwksUrl =
-    options.jwksUrl ??
-    `${options.issuer.replace(/\/$/, '')}/protocol/openid-connect/certs`
+  const jwksUrl = options.jwksUrl ?? defaultJwksUrl(options.issuer)
   return createIdentity(
     createRemoteJWKSet(new URL(jwksUrl)),
     options.issuer,
@@ -55,6 +81,8 @@ export async function createTestIdentity(): Promise<{
     subject?: string
     audience?: string
     omitTenant?: boolean
+    /** Cognito access tokens carry client_id and no aud. */
+    useClientId?: boolean
   }) => Promise<string>
 }> {
   const keys = await generateKeyPair('RS256')
@@ -66,6 +94,7 @@ export async function createTestIdentity(): Promise<{
         subject: input.subject ?? 'tester',
         audience: input.audience ?? testAudience,
         omitTenant: input.omitTenant === true,
+        useClientId: input.useClientId === true,
       }),
   }
 }
@@ -86,10 +115,12 @@ function createIdentity(
       try {
         const verified = await jwtVerify(token, key, {
           issuer,
-          audience,
           algorithms: ['RS256'],
         })
         payload = verified.payload
+        if (!audienceMatches(payload, audience)) {
+          throw new UnauthenticatedError('Token audience was rejected')
+        }
       } catch {
         throw new UnauthenticatedError('Bearer token was rejected')
       }
@@ -108,6 +139,14 @@ function createIdentity(
       }
     },
   }
+}
+
+function audienceMatches(payload: JWTPayload, audience: string): boolean {
+  const aud = payload.aud
+  if (typeof aud === 'string') return aud === audience
+  if (Array.isArray(aud)) return aud.includes(audience)
+  const clientId = (payload as { client_id?: unknown }).client_id
+  return clientId === audience
 }
 
 function tenantClaimOf(value: unknown): string | null {
@@ -129,16 +168,18 @@ async function signToken(
     subject: string
     audience: string
     omitTenant: boolean
+    useClientId: boolean
   },
 ): Promise<string> {
   const claims: JWTPayload = {}
   if (!input.omitTenant) claims.tenant_id = input.tenantId
-  return new SignJWT(claims)
+  if (input.useClientId) claims.client_id = input.audience
+  const jwt = new SignJWT(claims)
     .setProtectedHeader({ alg: 'RS256' })
     .setSubject(input.subject)
     .setIssuer(testIssuer)
-    .setAudience(input.audience)
     .setIssuedAt()
     .setExpirationTime('2h')
-    .sign(key)
+  if (!input.useClientId) jwt.setAudience(input.audience)
+  return jwt.sign(key)
 }

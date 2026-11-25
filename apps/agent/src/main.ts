@@ -1,15 +1,11 @@
-import { createJwksIdentity } from '@meridian/auth'
+import { createJwksIdentity, identityConfigFromEnv } from '@meridian/auth'
 import { buildAgentApp } from './server.js'
 
-const issuer = process.env.KEYCLOAK_ISSUER
-const audience = process.env.KEYCLOAK_AUDIENCE
 const apiUrl = process.env.API_URL
-if (!issuer) throw new Error('KEYCLOAK_ISSUER is required')
-if (!audience) throw new Error('KEYCLOAK_AUDIENCE is required')
 if (!apiUrl) throw new Error('API_URL is required')
 
 const app = buildAgentApp({
-  identity: createJwksIdentity({ issuer, audience }),
+  identity: createJwksIdentity(identityConfigFromEnv(process.env)),
   apiUrl,
   logger: true,
 })

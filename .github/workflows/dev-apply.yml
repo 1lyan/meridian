@@ -1,0 +1,120 @@
+name: dev-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Create alice and bob and wait until one order is allocated
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+      - uses: hashicorp/setup-terraform@v3
+      - name: Apply the dev stack
+        env:
+          TF_VAR_mongo_url: ${{ secrets.MONGO_URL }}
+        run: |
+          terraform -chdir=infra/terraform/dev init \
+            -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}" \
+            -backend-config="region=us-east-1"
+          terraform -chdir=infra/terraform/dev apply -input=false -auto-approve
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Push arm64 images
+        run: |
+          registry="$(terraform -chdir=infra/terraform/dev output -raw ecr_registry)"
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$registry"
+          tag="${{ github.sha }}"
+          for target in api worker agent edge; do
+            docker buildx build --platform linux/arm64 --push \
+              -f infra/aws/Dockerfile --target "$target" \
+              -t "$registry/meridian-$target:$tag" .
+          done
+      - name: Upload the compose bundle
+        run: |
+          bucket="$(terraform -chdir=infra/terraform/dev output -raw artifact_bucket)"
+          aws s3 cp infra/aws/docker-compose.yml "s3://$bucket/dev/bundle/docker-compose.yml"
+          aws s3 cp infra/aws/deploy.sh "s3://$bucket/dev/bundle/deploy.sh"
+      - name: Deploy on the instance
+        run: |
+          instance="$(terraform -chdir=infra/terraform/dev output -raw instance_id)"
+          bucket="$(terraform -chdir=infra/terraform/dev output -raw artifact_bucket)"
+          tag="${{ github.sha }}"
+          online=0
+          for _ in $(seq 1 30); do
+            status="$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=$instance" \
+              --query 'InstanceInformationList[0].PingStatus' --output text)"
+            if [ "$status" = "Online" ]; then
+              online=1
+              break
+            fi
+            sleep 10
+          done
+          if [ "$online" != "1" ]; then
+            echo "SSM agent did not come online"
+            exit 1
+          fi
+          cat > /tmp/ssm.json <<EOF
+          {
+            "commands": [
+              "set -eux",
+              "aws s3 sync s3://${bucket}/dev/bundle/ /opt/meridian",
+              "chmod +x /opt/meridian/deploy.sh",
+              "/opt/meridian/deploy.sh ${tag}"
+            ]
+          }
+          EOF
+          command_id="$(aws ssm send-command \
+            --instance-ids "$instance" \
+            --document-name AWS-RunShellScript \
+            --comment "meridian deploy ${tag}" \
+            --parameters file:///tmp/ssm.json \
+            --query Command.CommandId --output text)"
+          echo "command $command_id"
+          for _ in $(seq 1 60); do
+            invocation="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" --query Status --output text || true)"
+            case "$invocation" in
+              Success) exit 0 ;;
+              Failed|TimedOut|Cancelled)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "$instance" --query StandardErrorContent --output text
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo "deploy timed out with status $invocation"
+          exit 1
+      - name: Seed the two demo tenants
+        if: inputs.seed
+        run: |
+          api="$(terraform -chdir=infra/terraform/dev output -raw api_url)"
+          for _ in $(seq 1 30); do
+            if curl -fsS "$api/health"; then
+              break
+            fi
+            sleep 10
+          done
+          curl -fsS "$api/health"
+          export AWS_REGION=us-east-1
+          export API_URL="$api"
+          export USER_POOL_ID="$(terraform -chdir=infra/terraform/dev output -raw user_pool_id)"
+          export CLIENT_ID="$(terraform -chdir=infra/terraform/dev output -raw client_id)"
+          export ALICE_PASSWORD="$(aws ssm get-parameter --name /meridian/dev/alice_password --with-decryption --query Parameter.Value --output text)"
+          export BOB_PASSWORD="$(aws ssm get-parameter --name /meridian/dev/bob_password --with-decryption --query Parameter.Value --output text)"
+          sh infra/aws/seed.sh

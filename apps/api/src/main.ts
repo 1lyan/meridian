@@ -1,5 +1,8 @@
-import { createJwksIdentity } from '@meridian/auth'
-import { createProjections } from '@meridian/persistence-mongo'
+import { createJwksIdentity, identityConfigFromEnv } from '@meridian/auth'
+import {
+  createProjections,
+  mongoClientOptions,
+} from '@meridian/persistence-mongo'
 import { migrate } from '@meridian/persistence-pg'
 import { MongoClient } from 'mongodb'
 import { Pool } from 'pg'
@@ -7,16 +10,12 @@ import { buildApp } from './app.js'
 
 const databaseUrl = process.env.DATABASE_URL
 const mongoUrl = process.env.MONGO_URL
-const issuer = process.env.KEYCLOAK_ISSUER
-const audience = process.env.KEYCLOAK_AUDIENCE
 if (!databaseUrl) throw new Error('DATABASE_URL is required')
 if (!mongoUrl) throw new Error('MONGO_URL is required')
-if (!issuer) throw new Error('KEYCLOAK_ISSUER is required')
-if (!audience) throw new Error('KEYCLOAK_AUDIENCE is required')
-const identity = createJwksIdentity({ issuer, audience })
+const identity = createJwksIdentity(identityConfigFromEnv(process.env))
 
 const pool = new Pool({ connectionString: databaseUrl })
-const mongo = new MongoClient(mongoUrl, { directConnection: true })
+const mongo = new MongoClient(mongoUrl, mongoClientOptions(mongoUrl))
 await mongo.connect()
 const projections = createProjections(mongo.db('meridian'))
 await projections.ensureIndexes()
