@@ -50,3 +50,13 @@ services:
       - ../keycloak/meridian-realm.json:/opt/keycloak/data/import/meridian-realm.json:ro
     ports:
       - "8080:8080"
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.11.0
+    profiles: ["chaos"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8474:8474"
+      - "15432:15432"
+      - "15673:15673"

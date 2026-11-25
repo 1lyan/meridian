@@ -13,3 +13,4 @@ coverage
 crash.log
 override.tf
 infra/terraform/**/*.zip
+backups/

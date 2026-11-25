@@ -14,6 +14,8 @@ Money is integer cents. `499` is $4.99. The tenant is the `tenant_id` claim in a
 - PostgreSQL that accepts `postgres://meridian:meridian@localhost:5432/meridian`. The `meridian` role is a superuser, because creating the `vector` extension requires one. The database also needs `pgcrypto`.
 - RabbitMQ at `amqp://guest:guest@localhost:5672`.
 - MongoDB at `mongodb://localhost:27017/meridian`. Catalog documents, order timelines, and agent runs are projections. Search stays in Postgres.
+- k6, only for the load script: `brew install k6`, then `k6 version`.
+- `pg_dump` and `pg_restore`, only for backups. They come with `brew install postgresql@18`. If `pg_dump` is not found: `export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"`.
 
 The first migration creates `pgcrypto` and `vector`. `pgcrypto` is part of PostgreSQL. `vector` is [pgvector](https://github.com/pgvector/pgvector) and has to be installed on the server before that statement can succeed. When a later change needs another binary, port, role, database, or extension, add the install command and the console commands to this section in the same change.
 
@@ -571,6 +573,17 @@ Bob's token loads an empty inbox. `GET /v1/approvals/$APPROVAL_ID` and `GET /v1/
 
 `pnpm --filter @meridian/agent test` is the fixture suite. It fails the run if the model invents a sku, omits the tenant, calls `placeOrder`, or follows an instruction planted in a product description. The nightly workflow is the only job that can call Bedrock, and that call is capped at 256 tokens. The agent is described in [docs/architecture/agent.md](docs/architecture/agent.md).
 
+## Load, chaos, and backup
+
+k6 places orders for 20 seconds. The API and a token have to exist first. Stop the worker if those orders should stay `placed`.
+
+```bash
+brew install k6
+k6 run -e API_URL=http://127.0.0.1:3000 -e TOKEN="$TOKEN" load/place-order.js
+```
+
+The Toxiproxy drill and the dump/restore steps are in [docs/runbooks/chaos-drill.md](docs/runbooks/chaos-drill.md) and [docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). Start the proxy with `pnpm compose:chaos`. The postmortem template is [docs/runbooks/postmortem.md](docs/runbooks/postmortem.md).
+
 ## AWS dev stack
 
 Local `pnpm dev` does not need AWS. The dev stack is a separate `t4g.small` and an RDS database, applied only while you are using it. It costs about a dollar a day and is destroyed afterwards.
@@ -584,6 +597,12 @@ terraform version
 aws --version
 ```
 
+Check the machine without creating resources:
+
+```bash
+./scripts/prepare-aws.sh
+```
+
 The account, the Atlas M0 allowlist, the GitHub variables, and the apply and destroy workflows are in [docs/runbooks/dev-stack.md](docs/runbooks/dev-stack.md). Bootstrap is the only Terraform you run on your machine. `dev-apply` and `dev-destroy` are manual GitHub Actions. Pull requests do not apply either stack.
 
 ## Phases
@@ -594,4 +613,4 @@ The account, the Atlas M0 allowlist, the GitHub variables, and the apply and des
 3. Done locally. Keycloak bearer tokens, Postgres row-level security, and an audit log.
 4. Done locally. Agent tools, approval inbox, and fixture evals. The nightly Bedrock call stays capped and is not part of pull-request CI.
 5. Done as code, not applied. Free-plan Terraform, GitHub OIDC, and apply/destroy workflows. See [docs/runbooks/dev-stack.md](docs/runbooks/dev-stack.md).
-6. k6, Toxiproxy, backup and restore.
+6. Done locally. k6 place-order script, Toxiproxy drill, backup and restore, postmortem template.

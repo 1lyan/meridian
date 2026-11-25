@@ -4,6 +4,8 @@ Bootstrap stays up. The dev stack is applied only while you are using it, then d
 
 Nothing in this repository applies the stack for you. The workflows `dev-apply` and `dev-destroy` are `workflow_dispatch` only.
 
+Run `./scripts/prepare-aws.sh` from the repo root first. It only reads the CLI, the identity, and whether `terraform.tfvars` exists.
+
 ## Install
 
 ```bash
