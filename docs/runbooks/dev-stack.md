@@ -34,7 +34,7 @@ terraform apply
 
 This creates the state bucket, the lock table, budget alerts at $20 and $50 of monthly spend, and two GitHub OIDC roles. The apply role can change the dev stack and is denied NAT, ElastiCache, OpenSearch, MSK, and Amazon MQ. The nightly role can invoke Bedrock Nova Micro and nothing else. Only `main` on `1lyan/meridian` can assume them.
 
-Copy the outputs into GitHub repository variables:
+The commands, and where those values go, are in [aws-deployment.md](aws-deployment.md). Copy the outputs into GitHub repository variables:
 
 - `TF_STATE_BUCKET`
 - `TF_LOCK_TABLE`
