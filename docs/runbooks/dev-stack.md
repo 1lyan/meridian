@@ -45,12 +45,13 @@ The commands, and where those values go, are in [aws-deployment.md](aws-deployme
 
 ## Atlas, before the app can start
 
-1. In MongoDB Atlas, create a free M0 cluster.
-2. Create a database user and a connection string for the database `meridian`.
-3. Run dev-apply once so Terraform prints the Elastic IP, or read it from the apply log.
-4. In Atlas, Network Access, allow that Elastic IP.
-5. Store the connection string as the GitHub secret `MONGO_URL`.
-6. Run dev-apply again.
+The click-by-click order is in [aws-deployment.md](aws-deployment.md). In short:
+
+1. Run `dev-apply` once, with `MONGO_URL` still unset. The job is red at **Deploy on the instance**. That is expected. A failure at **Configure AWS credentials** means the GitHub role trust rejected the sign-in and no Elastic IP exists.
+2. Copy `elastic_ip` from the successful step **Apply the dev stack** in that same run.
+3. In Atlas Network Access, allow that address. Do not allow `0.0.0.0/0`.
+4. Store the `mongodb+srv://` connection string as the GitHub secret `MONGO_URL` with `gh secret set MONGO_URL --repo 1lyan/meridian`.
+5. Run `dev-apply` again.
 
 The instance refuses to start the containers while that parameter is `unset`.
 

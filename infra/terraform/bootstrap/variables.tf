@@ -9,6 +9,12 @@ variable "github_repository" {
   default     = "1lyan/meridian"
 }
 
+variable "github_oidc_subject" {
+  type        = string
+  description = "GitHub Actions OIDC subject for this repo, without the ref suffix. GitHub includes the immutable owner id and repository id."
+  default     = "1lyan@807091/meridian@1461829565"
+}
+
 variable "budget_email" {
   type        = string
   description = "Inbox for the $20 and $50 monthly spend alerts."

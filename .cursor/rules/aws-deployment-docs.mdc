@@ -1,0 +1,6 @@
+---
+description: Write every new AWS deployment step into the AWS runbooks in the same change.
+alwaysApply: true
+---
+
+When you give the user a new step for deploying, debugging, or tearing down Meridian on AWS, add that step to `docs/runbooks/aws-deployment.md` in the same change. Keep `docs/runbooks/dev-stack.md` aligned when it describes the same action. Include the command, where a value is read from, and what a failed run looks like when that failure is expected.

@@ -45,28 +45,41 @@ The same settings are in the browser under the repository's Settings, Secrets an
 
 ## Dev stack
 
-Bootstrap is already applied, and the four GitHub variables are set. The dev stack costs about a dollar a day until `dev-destroy`. That workflow removes the instance, the Elastic IP, and RDS. Bootstrap stays.
+Confirm the budget email AWS sent to `budget_email`. The alerts start after that confirmation.
 
-1. Confirm the budget email. AWS sent it to `illia.yuriev.nechyporenko@gmail.com`. The alerts start after that confirmation.
+Create the Atlas M0 cluster before the first `dev-apply`. The database user and the database are both named `meridian`. Choose AWS in `us-east-1`. Copy the `mongodb+srv://` connection string and keep it locally. Leave Atlas Network Access empty. Do not allow `0.0.0.0/0`.
 
-2. Create the Atlas cluster. In MongoDB Atlas, create a free M0 cluster, a database user, and a connection string for the database `meridian`. Leave Network Access empty until the Elastic IP exists.
+GitHub's token subject includes the owner id and the repository id: `repo:1lyan@807091/meridian@1461829565:ref:refs/heads/main`. If bootstrap was applied before that subject was in `oidc.tf`, apply bootstrap again from `infra/terraform/bootstrap` so the role trust matches. A `dev-apply` that dies on `Could not assume role with OIDC` created nothing. There is no Elastic IP in that log.
 
-3. Run `dev-apply` once. On GitHub, open Actions, choose `dev-apply`, and run it with seed left on. The job creates the instance, RDS, Cognito, and the Elastic IP. It then fails while `MONGO_URL` is missing, so the containers do not start and the seed does not run. A red job at that step is the expected result. In the apply log, copy the Elastic IP from the Terraform outputs. `api_url` is `http://<that-ip>`.
+The dev stack costs about a dollar a day from the moment the first apply creates the instance, even if a later step fails. `dev-destroy` removes the instance, the Elastic IP, and RDS. Bootstrap and the Atlas cluster stay.
 
-4. Allow that IP and store the secret. In Atlas, Network Access, allow the Elastic IP. From the repo root, store the connection string without pasting it into chat:
+1. Run `dev-apply` once. On GitHub, open Actions, choose `dev-apply`, and run the workflow with seed left on. From the repo root the same start is `gh workflow run dev-apply --repo 1lyan/meridian`. Leave `MONGO_URL` unset. Terraform creates the instance, RDS, Cognito, and the Elastic IP. The deploy step then fails because Mongo is missing, and the seed does not run. A red job at **Deploy on the instance** is the expected result of this first run.
 
-```bash
-gh secret set MONGO_URL --repo 1lyan/meridian
-```
+2. Copy the Elastic IP from that failed run. Open the run in GitHub Actions. The address is in the earlier successful step **Apply the dev stack**, in the Terraform outputs:
 
-The command prompts for the value.
+   ```text
+   elastic_ip = "x.x.x.x"
+   api_url = "http://x.x.x.x"
+   ```
 
-5. Run `dev-apply` again. This start succeeds. Seed creates Cognito users `alice` and `bob`, places one order, and waits until its status is `allocated`.
+   It is not in the red deploy step. If the failed step is **Configure AWS credentials**, stop. The sign-in failed and no address exists. If the failed step is **Push arm64 images**, the address is still in **Apply the dev stack**. The image was not pushed. Allow the address, store `MONGO_URL`, and run `dev-apply` again after the image fix is on `main`.
 
-The API is `http://<elastic-ip>`. The passwords are random values in SSM, not `alice` and `bob`:
+3. Allow that address in Atlas. In Network Access, add `x.x.x.x`. Do not allow `0.0.0.0/0`.
+
+4. Store the connection string. From the repo root, without pasting the string into chat:
+
+   ```bash
+   gh secret set MONGO_URL --repo 1lyan/meridian
+   ```
+
+   The command prompts for the `mongodb+srv://` value.
+
+5. Run `dev-apply` again, the same way as step 1. This run should finish green. Seed creates Cognito users `alice` and `bob`, places one order, and waits until its status is `allocated`.
+
+The API is `http://<elastic-ip>`. The inbox is that same origin. The passwords are random values in SSM, not `alice` and `bob`:
 
 ```bash
 aws ssm get-parameter --name /meridian/dev/alice_password --with-decryption --query Parameter.Value --output text
 ```
 
-The same procedure is summarized in [dev-stack.md](dev-stack.md).
+Alice's tenant is `6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b`. Bob's is `11111111-1111-4111-8111-111111111111`. Bob's token gets `404` for Alice's order. [dev-stack.md](dev-stack.md) has the same order of steps.
