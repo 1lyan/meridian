@@ -173,9 +173,7 @@ describe('read side', () => {
       headers: await bearer(tenantId),
     })
     expect(rebuilt.statusCode).toBe(200)
-    expect(
-      rebuilt.json<{ catalog: number; timelines: number }>(),
-    ).toEqual({
+    expect(rebuilt.json<{ catalog: number; timelines: number }>()).toEqual({
       catalog: 2,
       timelines: 1,
     })
