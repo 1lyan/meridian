@@ -8,15 +8,15 @@ Meridian is a multi-tenant control plane for clinical supply. Clinics order glov
 
 I did not start with a service per aggregate. That would have taught deployment before the domain had a reason to split. I also did not put everything in one unstructured app. The fitness function is `dependency-cruiser`: domain packages cannot import Fastify, Drizzle, `pg`, `amqplib`, MongoDB, Zod, or Pino. The shared kernel holds branded ids and `DomainError` and imports nothing else.
 
-What runs is one API, one worker, and one agent process. A module becomes its own service only when it has its own scale or failure profile. The agent already has that profile, so it is a separate process and is treated as untrusted. ADR 0001.
+What runs is one API and one worker. A module becomes its own service only when it has its own scale or failure profile. ADR 0001.
 
 If asked why TypeScript packages and not network boundaries: a package boundary fails in CI in seconds. A network boundary fails in production, after I have invented a deploy topology I do not need yet.
 
 ## 2. Postgres is the record
 
-Orders, stock, and money need constraints and one transaction that can include the outbox. Catalog pages, order timelines, and agent transcripts are documents. They can change shape, and they can be thrown away.
+Orders, stock, and money need constraints and one transaction that can include the outbox. Catalog pages and order timelines are documents. They can change shape, and they can be thrown away.
 
-PostgreSQL is the system of record. MongoDB holds three collections, `catalog-content`, `order-timeline`, and `agent-run`. `POST /v1/projections/rebuild` deletes only the caller's tenant and recreates those documents from the tables. A screen that cannot survive that rebuild is a design bug.
+PostgreSQL is the system of record. MongoDB holds two collections, `catalog-content` and `order-timeline`. `POST /v1/projections/rebuild` deletes only the caller's tenant and recreates those documents from the tables. A screen that cannot survive that rebuild is a design bug.
 
 Search does not read Mongo. `GET /v1/catalog/search` is a Postgres query: keyword hits sort first, then pgvector cosine similarity. The vector is a hashed bag of words, 32 dimensions, the same width as migration `0003`. A model can replace `embedText` later without a new collection.
 
@@ -85,31 +85,17 @@ Mongo and catalog search repeat the tenant predicate. They do not inherit the Po
 
 `GET /v1/audit` lists who placed an order, received stock, upserted a product, or moved the saga, for the caller's tenant only. `actorId` is the token `sub`. Keycloak's `sub` is the internal user id, not the username. ADR 0005 and ADR 0009.
 
-## 7. The agent proposes. The core commits
-
-The agent can search the catalog, check available-to-promise, quote a price, and read an order. The only write it can request is an approval. A person approves that row. `POST /v1/approvals/:id/execute` places the order through the same transaction as `POST /v1/orders`, with idempotency key `approval:<id>` and `paymentOutcome` `capture`. The price comes from `catalog_products`, not from the model.
-
-`runAgent` checks every tool call before the gateway runs:
-
-- `placeOrder`, `receiveStock`, `upsertCatalog`, `executeApproval`, and `decideApproval` stop the run with `commit_tool`. That check happens before the tenant check.
-- A missing tenant is `tenant_dropped`. A different tenant is `tenant_mismatch`. The gateway never receives a tenant argument. The API takes it from the bearer token.
-- `proposeApproval` may name only skus that `searchCatalog` returned in the same run. Anything else is `invented_sku`.
-
-The prompt file is `apps/agent/prompts/buyer.md`, version `buyer-1`, stored on every run. Pull-request tests use a scripted model, including one that obeys an instruction planted in a product description. Local `pnpm dev:agent` uses a guided model that proposes the first search hit and ignores description text. The nightly workflow is the only caller of Bedrock, and that call is capped at 256 output tokens. ADR 0006.
-
-If asked why the agent is not allowed to call `POST /v1/orders` with a service credential: catalog text is untrusted input. A model that can commit will eventually commit something the user did not confirm.
-
-## 8. AWS is a budget with an off switch
+## 7. AWS is a budget with an off switch
 
 The Free plan closes when the credits hit zero or after six months. NAT gateways, an idle load balancer, Amazon MQ, ElastiCache, and OpenSearch spend that balance while nobody is learning.
 
-Bootstrap stays up: the state bucket, the lock table, budget alerts at $20 and $50, and two GitHub OIDC roles. Only `main` on this repo can assume them. The apply role is denied NAT, ElastiCache, OpenSearch, MSK, and Amazon MQ. The nightly role can invoke Bedrock Nova Micro and nothing else.
+Bootstrap stays up: the state bucket, the lock table, budget alerts at $20 and $50, and one GitHub OIDC role. Only `main` on this repo can assume it. The apply role is denied NAT, ElastiCache, OpenSearch, MSK, and Amazon MQ.
 
 The dev stack is applied only while it is in use. One VPC, two public subnets, an internet gateway, no NAT. Terraform refuses `enable_nat`. One `t4g.small` with an Elastic IP, Docker, and the same processes as local except Postgres and Keycloak. RDS Postgres 16 is `db.t4g.micro`, not publicly accessible, port 5432 only from the instance security group. Port 22 is closed. SSM Run Command deploys it. Cognito is the issuer. A pre-token Lambda copies `custom:tenant_id` onto `tenant_id`. MongoDB is an Atlas M0 cluster the operator creates and allowlists to the Elastic IP. Images are `linux/arm64` because the instance is Graviton.
 
 While that stack exists it costs about a dollar a day. Destroy is the off switch. Stopping the instance is not: AWS starts a stopped database again after seven days, and an Elastic IP can still cost money. The X-Ray daemon runs. The API does not export spans yet. Logs are pino, and container logs go to CloudWatch. ADR 0008.
 
-## 9. Failure is something I can run
+## 8. Failure is something I can run
 
 k6 places orders for 20 seconds with a fresh idempotency key per iteration. The run fails if more than 5% of requests fail. Stock is not required for the `201`.
 
@@ -133,8 +119,7 @@ Backups are `pg_dump --format=custom`. Restore overwrites the target database. R
 3. Outbox, confirms, inbox, and the dead-letter ladder. Four minutes.
 4. The saga, including decline and the reservation timeout. Four minutes.
 5. Row-level security and why the owner bypasses it. Three minutes.
-6. The agent policy, and why the nightly model call is the only real one. Three minutes.
-7. The free-plan shape and why destroy is the off switch. Two minutes.
+6. The free-plan shape and why destroy is the off switch. Two minutes.
 
 ## Questions worth having an answer for
 
@@ -145,7 +130,5 @@ Backups are `pg_dump --format=custom`. Restore overwrites the target database. R
 **Why is the replay body still `placed`?** The stored response is the contract of that key. The saga is a later fact. `GET` is how you see it. Changing the stored body would make the replay lie about what the first request returned.
 
 **How does tenant B get `404` instead of an empty list?** The order id is in the URL. The policy filters it out, and the handler maps a missing row to `not_found`. That also avoids confirming that the id exists.
-
-**What if the model invents a sku?** The run stops with `invented_sku` before an approval is written. The price, if an approval is written, still comes from the catalog row.
 
 **What breaks first on the `t4g.small`?** Memory. The compose limits sum to about 1.5 GB on a 2 GB instance. RabbitMQ is the heavy one. Postgres and Keycloak stay off that box for that reason.

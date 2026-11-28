@@ -32,16 +32,13 @@ terraform init
 terraform apply
 ```
 
-This creates the state bucket, the lock table, budget alerts at $20 and $50 of monthly spend, and two GitHub OIDC roles. The apply role can change the dev stack and is denied NAT, ElastiCache, OpenSearch, MSK, and Amazon MQ. The nightly role can invoke Bedrock Nova Micro and nothing else. Only `main` on `1lyan/meridian` can assume them.
+This creates the state bucket, the lock table, budget alerts at $20 and $50 of monthly spend, and the GitHub OIDC role `meridian-github-apply`. That role can change the dev stack and is denied NAT, ElastiCache, OpenSearch, MSK, and Amazon MQ. Only `main` on `1lyan/meridian` can assume it. A later bootstrap apply removes the unused nightly role if it is still there.
 
 The commands, and where those values go, are in [aws-deployment.md](aws-deployment.md). Copy the outputs into GitHub repository variables:
 
 - `TF_STATE_BUCKET`
 - `TF_LOCK_TABLE`
 - `AWS_APPLY_ROLE_ARN`
-- `AWS_NIGHTLY_ROLE_ARN`
-
-`BEDROCK_MODEL_ID` is optional. Set it to `amazon.nova-micro-v1:0` only after you enable that model in the Bedrock console. The nightly workflow is the only caller, and the call stays capped at 256 tokens.
 
 ## Atlas, before the app can start
 
@@ -67,7 +64,7 @@ Passwords for alice and bob are random and live in SSM under `/meridian/dev/alic
 aws ssm get-parameter --name /meridian/dev/alice_password --with-decryption --query Parameter.Value --output text
 ```
 
-The API is `http://<elastic-ip>`. The inbox is that same origin. Cognito access tokens carry `tenant_id` and `client_id`. Alice's tenant is `6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b`. Bob's is `11111111-1111-4111-8111-111111111111`.
+The API is `http://<elastic-ip>`. Cognito access tokens carry `tenant_id` and `client_id`. Alice's tenant is `6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b`. Bob's is `11111111-1111-4111-8111-111111111111`.
 
 Postgres is RDS `db.t4g.micro`, not reachable from the internet. The instance security group is the only ingress. RabbitMQ and Redis stay on the instance. Keycloak does not run there.
 

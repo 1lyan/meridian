@@ -1,8 +1,8 @@
 # AWS dev stack
 
-Bootstrap is the state bucket, the lock table, two GitHub OIDC roles, and monthly budgets at $20 and $50. It stays up.
+Bootstrap is the state bucket, the lock table, the GitHub apply role, and monthly budgets at $20 and $50. It stays up.
 
-The dev stack is one VPC, two public subnets, and an internet gateway. There is no NAT gateway. `enable_nat` cannot be true, and the apply role is denied `ec2:CreateNatGateway`. RDS Postgres 16 (`db.t4g.micro`) has no public address. Its security group allows port 5432 only from the instance. The instance is a `t4g.small` with an Elastic IP, Docker, and the same services as local Compose except Postgres and Keycloak: API, worker, agent, Caddy, RabbitMQ, Redis, and the X-Ray daemon. SSM Run Command deploys it. Port 22 is closed.
+The dev stack is one VPC, two public subnets, and an internet gateway. There is no NAT gateway. `enable_nat` cannot be true, and the apply role is denied `ec2:CreateNatGateway`. RDS Postgres 16 (`db.t4g.micro`) has no public address. Its security group allows port 5432 only from the instance. The instance is a `t4g.small` with an Elastic IP, Docker, and the same services as local Compose except Postgres and Keycloak: API, worker, Caddy, RabbitMQ, Redis, and the X-Ray daemon. RDS connections use `sslmode=no-verify` because RDS rejects unencrypted sessions. SSM Run Command deploys it. Port 22 is closed.
 
 Cognito is the AWS issuer. A pre-token Lambda copies `custom:tenant_id` to the `tenant_id` claim. Access tokens identify the audience with `client_id`, and the API accepts that in place of `aud`. Keycloak tokens are unchanged.
 

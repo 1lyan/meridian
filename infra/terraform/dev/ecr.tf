@@ -1,5 +1,5 @@
 locals {
-  repositories = ["meridian-api", "meridian-worker", "meridian-agent", "meridian-edge"]
+  repositories = ["meridian-api", "meridian-worker", "meridian-edge"]
 }
 
 resource "aws_ecr_repository" "app" {

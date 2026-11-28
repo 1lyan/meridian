@@ -2,7 +2,7 @@
 
 Bootstrap is applied from this machine. The dev stack is applied later by the GitHub Action `dev-apply`. These steps create the state bucket, the lock table, the budget alerts, and the two GitHub roles. They do not create the EC2 instance or the database.
 
-The four names below are GitHub repository variables on `1lyan/meridian`. They do not go in the root `.env`. That file is only for the local API, worker, and agent.
+The three names below are GitHub repository variables on `1lyan/meridian`. They do not go in the root `.env`. That file is only for the local API and worker.
 
 `aws sts get-caller-identity` must show the Free-plan account, and the CLI region must be `us-east-1`. `infra/terraform/bootstrap/terraform.tfvars` must exist and must set `budget_email`. Copy it from `terraform.tfvars.example` if it is missing. The file is gitignored.
 
@@ -23,12 +23,11 @@ Still in that directory, print the values:
 terraform output
 ```
 
-| GitHub variable        | Terraform output   |
-| ---------------------- | ------------------ |
-| `TF_STATE_BUCKET`      | `state_bucket`     |
-| `TF_LOCK_TABLE`        | `lock_table`       |
-| `AWS_APPLY_ROLE_ARN`   | `apply_role_arn`   |
-| `AWS_NIGHTLY_ROLE_ARN` | `nightly_role_arn` |
+| GitHub variable      | Terraform output |
+| -------------------- | ---------------- |
+| `TF_STATE_BUCKET`    | `state_bucket`   |
+| `TF_LOCK_TABLE`      | `lock_table`     |
+| `AWS_APPLY_ROLE_ARN` | `apply_role_arn` |
 
 ## GitHub variables
 
@@ -38,7 +37,6 @@ From the repo root, substitute the printed values:
 gh variable set TF_STATE_BUCKET --repo 1lyan/meridian --body "<state_bucket>"
 gh variable set TF_LOCK_TABLE --repo 1lyan/meridian --body "<lock_table>"
 gh variable set AWS_APPLY_ROLE_ARN --repo 1lyan/meridian --body "<apply_role_arn>"
-gh variable set AWS_NIGHTLY_ROLE_ARN --repo 1lyan/meridian --body "<nightly_role_arn>"
 ```
 
 The same settings are in the browser under the repository's Settings, Secrets and variables, Actions, Variables. These are variables, not secrets.
@@ -76,7 +74,9 @@ The dev stack costs about a dollar a day from the moment the first apply creates
 
 5. Run `dev-apply` again, the same way as step 1. This run should finish green. Seed creates Cognito users `alice` and `bob`, places one order, and waits until its status is `allocated`.
 
-The API is `http://<elastic-ip>`. The inbox is that same origin. The passwords are random values in SSM, not `alice` and `bob`:
+A `502` from `/health` means Caddy is up and the API process is not. RDS Postgres requires an encrypted connection. The database URL stored for the instance ends in `sslmode=no-verify`. Without that, the API logs `no pg_hba.conf entry ... no encryption` and never listens, and Caddy answers `502`. That URL is written on the next `dev-apply` after the change is on `main`.
+
+The API is `http://<elastic-ip>`. The passwords are random values in SSM, not `alice` and `bob`:
 
 ```bash
 aws ssm get-parameter --name /meridian/dev/alice_password --with-decryption --query Parameter.Value --output text

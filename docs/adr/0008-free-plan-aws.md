@@ -10,7 +10,7 @@ A new AWS Free plan grants up to $200 in credits and closes when the credits hit
 
 ## Decision
 
-Bootstrap (state bucket, lock table, GitHub OIDC role, budget alerts at $20 and $50) stays up. The dev stack is applied only while it is in use and destroyed afterwards: one VPC with public subnets and no NAT, one `t4g.small`, RDS Postgres `db.t4g.micro` closed to the instance security group, one Elastic IP, ECR, Cognito, SSM Parameter Store, and SSM Run Command. Terraform refuses a NAT gateway. MongoDB in AWS is an Atlas M0 cluster. The model provider is Bedrock, called only by the nightly eval. Chaos stays on Toxiproxy. Dashboards stay on the local Grafana profile, with CloudWatch and X-Ray as the AWS view.
+Bootstrap (state bucket, lock table, GitHub OIDC role, budget alerts at $20 and $50) stays up. The dev stack is applied only while it is in use and destroyed afterwards: one VPC with public subnets and no NAT, one `t4g.small`, RDS Postgres `db.t4g.micro` closed to the instance security group, one Elastic IP, ECR, Cognito, SSM Parameter Store, and SSM Run Command. Terraform refuses a NAT gateway. MongoDB in AWS is an Atlas M0 cluster. Chaos stays on Toxiproxy. Dashboards stay on the local Grafana profile, with CloudWatch and X-Ray as the AWS view.
 
 While the stack exists it costs about a dollar a day. Destroy is the off switch. A stopped RDS instance restarts after seven days and a stopped instance can keep the Elastic IP charge.
 

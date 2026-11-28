@@ -6,7 +6,7 @@ There is no patient data. Money is integer cents.
 
 ## Before any scenario
 
-In every terminal that starts the API, the worker, the agent, or `pnpm migrate`:
+In every terminal that starts the API, the worker, or `pnpm migrate`:
 
 ```bash
 set -a && source .env && set +a
@@ -40,11 +40,9 @@ Four terminals:
 ```bash
 pnpm dev          # API, port 3000
 pnpm dev:worker   # relay, saga, projections
-pnpm dev:agent    # port 3001
-pnpm dev:web      # inbox, http://localhost:5173
 ```
 
-`curl -sS localhost:3000/health` returns `{"status":"ok","postgres":"ok"}` with no token. `503` and `postgres: unavailable` means the API cannot run `select 1`. Check `DATABASE_URL` and that the role `meridian` exists. `GET http://localhost:3001/health` is the agent process and does not check Postgres.
+`curl -sS localhost:3000/health` returns `{"status":"ok","postgres":"ok"}` with no token. `503` and `postgres: unavailable` means the API cannot run `select 1`. Check `DATABASE_URL` and that the role `meridian` exists.
 
 Tokens. Alice is tenant `6f1e2c4a-8b3d-4e5f-9a70-1c2d3e4f5a6b`. Bob is `11111111-1111-4111-8111-111111111111`.
 
@@ -244,54 +242,11 @@ curl -sS -X POST localhost:3000/v1/projections/rebuild \
   -H "authorization: Bearer $TOKEN"
 ```
 
-The body is `{ "catalog": <count>, "timelines": <count>, "agentRuns": <count> }`. GET the product and the timeline again. Both come back. Bob's documents are still there. Confirm in `mongosh` with Bob's tenant id before and after Alice's rebuild.
+The body is `{ "catalog": <count>, "timelines": <count> }`. GET the product and the timeline again. Both come back. Bob's documents are still there. Confirm in `mongosh` with Bob's tenant id before and after Alice's rebuild.
 
 `503` `projection_unavailable` means the API has no `MONGO_URL`. Both processes require it.
 
-## 7. Agent and the inbox
-
-Keep the API, the worker, and the agent up. `GLV-100` has to be in the catalog and available.
-
-```bash
-curl -sS -X POST localhost:3001/runs \
-  -H 'content-type: application/json' \
-  -H "authorization: Bearer $TOKEN" \
-  -d '{"message":"nitrile gloves"}'
-```
-
-Expect `status` `completed`, `promptVersion` `buyer-1`, and an `approvalId`. No order exists yet. `GET /v1/orders` is not how you list orders. Look up the approval:
-
-```bash
-curl -sS "localhost:3000/v1/approvals/<approval id>" \
-  -H "authorization: Bearer $TOKEN"
-```
-
-`status` is `proposed`. The unit price is `499`, from `catalog_products`.
-
-Open `http://localhost:5173`, paste `$TOKEN`, and choose Load inbox. Approve. The page shows an order id. GET that order: `placed`, then `allocated` if the worker is up and stock remains. The execute call uses idempotency key `approval:<id>`. Approving twice does not place a second order.
-
-Bob's token loads an empty inbox. `GET /v1/approvals/<id>` and `GET /v1/agent-runs/<run id>` with `$BOB_TOKEN` are `404`. A call to the agent with no token is `401` `unauthenticated`.
-
-If the inbox page cannot reach the API, the browser origin must be `http://localhost:5173` or `http://127.0.0.1:5173`. A token pasted from a shell that was never `source`d is empty, and every call is `401`.
-
-If `/runs` returns `blocked`:
-
-| `blockedReason`   | What the model did                                       |
-| ----------------- | -------------------------------------------------------- |
-| `commit_tool`     | It tried to place, receive, upsert, execute, or decide   |
-| `tenant_dropped`  | The tool call had no tenant                              |
-| `tenant_mismatch` | The tool call named a different tenant                   |
-| `invented_sku`    | It proposed a sku that search did not return in this run |
-
-Local `pnpm dev:agent` uses the guided model. It proposes the first search hit and does not follow instructions in a description. A blocked run locally means the catalog search returned nothing, so there was no legal sku to propose. Upsert `GLV-100`, wait until search returns it, and call `/runs` again.
-
-The fixture suite is the place that proves the policy against a hostile model:
-
-```bash
-pnpm --filter @meridian/agent test
-```
-
-## 8. Load, a cut, and a dump
+## 7. Load, a cut, and a dump
 
 Stop the worker first if the orders should stay `placed`. Otherwise they reserve stock.
 
@@ -323,5 +278,4 @@ Restore overwrites the target database. Take a fresh dump first. `pnpm migrate` 
 | Replay header missing                            | The key or the body differs from the first call, or this is the first call.                                   |
 | Timeline or catalog GET `404`, search `200`      | Worker has not projected. Mongo is behind Postgres on purpose.                                                |
 | Bob sees Alice's row in `psql`                   | You are connected as `meridian`. Use `SET LOCAL ROLE meridian_app`.                                           |
-| Inbox empty for Alice                            | Agent did not return an `approvalId`, or the token in the page is not Alice's.                                |
-| Approve does nothing                             | Worker is down, or stock cannot cover the proposal. The order is still `placed` until the saga runs.          |
+| Health `502` on the AWS address                  | Caddy is up and the API is not. Check `/meridian/api` in CloudWatch. RDS requires `sslmode=no-verify`.        |

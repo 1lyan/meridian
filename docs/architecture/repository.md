@@ -1,10 +1,8 @@
 # Repository map
 
 ```
-apps/api          HTTP composition root. Orders, catalog, search, approvals, and projection rebuild.
+apps/api          HTTP composition root. Orders, catalog, search, and projection rebuild.
 apps/worker       Outbox relay, saga, and projection consumer.
-apps/agent        Untrusted tool loop. Proposals only.
-apps/web          Order timeline and approval inbox.
 packages/kernel   Branded ids and DomainError.
 packages/domain-* Invariants. No framework, no driver.
 packages/contracts

@@ -10,7 +10,7 @@ Orders, stock, and money need constraints and a transaction that can include the
 
 ## Decision
 
-PostgreSQL is the system of record. MongoDB stores rebuildable documents: catalog content, order timelines, and agent runs. A rebuild command, added in phase 2, must recreate those documents from Postgres. Redis holds rate limits, short locks, and the idempotency cache. It does not hold stock or money.
+PostgreSQL is the system of record. MongoDB stores rebuildable documents: catalog content and order timelines. A rebuild command, added in phase 2, must recreate those documents from Postgres. Redis holds rate limits, short locks, and the idempotency cache. It does not hold stock or money.
 
 Drizzle is the typed query surface. The SQL migration is what actually runs, including checks Drizzle would hide.
 

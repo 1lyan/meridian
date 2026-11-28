@@ -5,7 +5,7 @@ variable "region" {
 
 variable "github_repository" {
   type        = string
-  description = "GitHub repository allowed to assume the apply and nightly roles. owner/name."
+  description = "GitHub repository allowed to assume the apply role. owner/name."
   default     = "1lyan/meridian"
 }
 

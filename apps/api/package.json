@@ -18,7 +18,6 @@
   "dependencies": {
     "@meridian/auth": "workspace:*",
     "@meridian/contracts": "workspace:*",
-    "@meridian/domain-approvals": "workspace:*",
     "@meridian/domain-catalog": "workspace:*",
     "@meridian/domain-ordering": "workspace:*",
     "@meridian/persistence-mongo": "workspace:*",

@@ -174,11 +174,10 @@ describe('read side', () => {
     })
     expect(rebuilt.statusCode).toBe(200)
     expect(
-      rebuilt.json<{ catalog: number; timelines: number; agentRuns: number }>(),
+      rebuilt.json<{ catalog: number; timelines: number }>(),
     ).toEqual({
       catalog: 2,
       timelines: 1,
-      agentRuns: 0,
     })
 
     const catalog = await app.inject({

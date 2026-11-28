@@ -10,10 +10,6 @@ output "apply_role_arn" {
   value = aws_iam_role.apply.arn
 }
 
-output "nightly_role_arn" {
-  value = aws_iam_role.nightly.arn
-}
-
 output "region" {
   value = var.region
 }

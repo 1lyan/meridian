@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded. The agent, the approval inbox, and the nightly model eval have been removed. Orders are placed through `POST /v1/orders`.
 
 ## Context
 

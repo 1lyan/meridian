@@ -1,7 +1,6 @@
 export { mongoClientOptions } from './client.js'
 export { type ProjectionName, projectionNames } from './names.js'
 export type {
-  AgentRunDocument,
   CatalogDocument,
   Projections,
   TimelineDocument,

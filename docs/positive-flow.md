@@ -57,8 +57,6 @@ That body is what this key will return forever, including after the order has mo
 
 No message is on RabbitMQ yet. If the process dies before this commit, there is no order. If it dies after the commit, the order and the outbox row are both there.
 
-A second door reaches this same transaction. The agent may propose an approval, and a person approves it in the inbox. `POST /v1/approvals/:id/execute` calls this place-order path with idempotency key `approval:<id>` and `paymentOutcome` `capture`. The price on that approval came from `catalog_products`. From the commit onward, both doors are this flow.
-
 ## 2. The relay publishes `OrderPlaced`
 
 The worker polls about every 200ms. The relay locks unpublished outbox rows with `FOR UPDATE SKIP LOCKED`, publishes `OrderPlaced` on the `commerce.order` exchange, waits for the broker confirm, and only then sets `published_at`. The routing key is `order.placed`. The queue `commerce.order.process` receives it.

@@ -73,23 +73,3 @@ resource "aws_iam_role_policy" "apply" {
   policy = data.aws_iam_policy_document.apply.json
 }
 
-resource "aws_iam_role" "nightly" {
-  name               = "meridian-github-nightly"
-  assume_role_policy = data.aws_iam_policy_document.github_trust.json
-}
-
-data "aws_iam_policy_document" "nightly" {
-  statement {
-    sid     = "BedrockNovaMicro"
-    actions = ["bedrock:InvokeModel"]
-    resources = [
-      "arn:aws:bedrock:${var.region}::foundation-model/amazon.nova-micro-v1:0",
-    ]
-  }
-}
-
-resource "aws_iam_role_policy" "nightly" {
-  name   = "meridian-github-nightly"
-  role   = aws_iam_role.nightly.id
-  policy = data.aws_iam_policy_document.nightly.json
-}

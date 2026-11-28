@@ -1,5 +1,5 @@
 locals {
-  database_url = "postgres://meridian:${random_password.database.result}@${aws_db_instance.main.address}:5432/meridian"
+  database_url = "postgres://meridian:${random_password.database.result}@${aws_db_instance.main.address}:5432/meridian?sslmode=no-verify"
   issuer       = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
   mongo_url    = var.mongo_url == "" ? "unset" : var.mongo_url
 }

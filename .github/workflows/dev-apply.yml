@@ -40,7 +40,7 @@ jobs:
           registry="$(terraform -chdir=infra/terraform/dev output -raw ecr_registry)"
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$registry"
           tag="${{ github.sha }}"
-          for target in api worker agent edge; do
+          for target in api worker edge; do
             docker buildx build --platform linux/arm64 --push \
               -f infra/aws/Dockerfile --target "$target" \
               -t "$registry/meridian-$target:$tag" .

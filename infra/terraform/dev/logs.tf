@@ -2,7 +2,6 @@ locals {
   log_groups = [
     "/meridian/api",
     "/meridian/worker",
-    "/meridian/agent",
     "/meridian/edge",
     "/meridian/rabbitmq",
     "/meridian/redis",

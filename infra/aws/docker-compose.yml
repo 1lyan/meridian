@@ -31,7 +31,6 @@ services:
       RABBIT_URL: amqp://guest:guest@rabbitmq:5672
       IDENTITY_ISSUER: ${IDENTITY_ISSUER}
       IDENTITY_AUDIENCE: ${IDENTITY_AUDIENCE}
-      API_URL: http://api:3000
       HOST: 0.0.0.0
       PORT: "3000"
       LOG_LEVEL: info
@@ -60,21 +59,6 @@ services:
         awslogs-region: ${AWS_REGION}
         awslogs-group: /meridian/worker
 
-  agent:
-    image: ${ECR_REGISTRY}/meridian-agent:${IMAGE_TAG}
-    mem_limit: 256m
-    restart: unless-stopped
-    environment:
-      <<: *app_env
-      AGENT_PORT: "3001"
-    depends_on:
-      - api
-    logging:
-      <<: *awslogs
-      options:
-        awslogs-region: ${AWS_REGION}
-        awslogs-group: /meridian/agent
-
   edge:
     image: ${ECR_REGISTRY}/meridian-edge:${IMAGE_TAG}
     mem_limit: 64m
@@ -83,7 +67,6 @@ services:
       - "80:80"
     depends_on:
       - api
-      - agent
     logging:
       <<: *awslogs
       options:
